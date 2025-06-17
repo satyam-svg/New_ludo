@@ -17,7 +17,7 @@ import { useAuth } from '../../hooks/useAuth';
 
 const { width } = Dimensions.get('window');
 
-const STAKES = [10, 50, 100, 500, 1000];
+const STAKES = [10, 30, 50, 100, 500, 1000];
 
 export default function HomeScreen() {
   const [selectedGame, setSelectedGame] = useState(null);
@@ -32,7 +32,7 @@ export default function HomeScreen() {
     {
       id: 'six-king',
       title: '6 King',
-      description: 'Battle with opponents\nFirst to get 3 sixes wins!',
+      description: 'Battle with \nOnline Opponents\nFirst to get 3 sixes wins!',
       icon: 'casino',
       gradient: ['#FF6B6B', '#FF8E53'],
       multiplier: '2x'

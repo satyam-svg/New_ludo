@@ -8,7 +8,8 @@ import {
   Dimensions,
   Animated,
   BackHandler,
-  Easing
+  Easing,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -39,12 +40,17 @@ export default function LuckyNumberGame() {
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const resultAnim = useRef(new Animated.Value(0)).current;
   const confettiAnim = useRef(new Animated.Value(0)).current;
+  const floatingAnim = useRef(new Animated.Value(0)).current;
+
+  const floatingAnimX = useRef(new Animated.Value(0)).current;
+  const floatingAnimY = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   // Confetti particles
   const confettiParticles = Array(20).fill(0).map((_, i) => ({
     id: i,
-    left: new Animated.Value(Math.random() * width),
-    top: new Animated.Value(-10),
+    translateX: new Animated.Value(Math.random() * width - width/2), // Center the range
+    translateY: new Animated.Value(-10),
     rotation: new Animated.Value(Math.random() * 360),
     scale: new Animated.Value(0.8 + Math.random() * 0.7),
     opacity: new Animated.Value(0),
@@ -78,8 +84,46 @@ export default function LuckyNumberGame() {
   }, [gameState]);
 
   useEffect(() => {
+    if (gameState === 'rolling') {
+      const floatingAnimation = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(floatingAnimY, {
+              toValue: 1,
+              duration: 3000,
+              easing: Easing.inOut(Easing.sin),
+              useNativeDriver: true,
+            }),
+            Animated.timing(floatingAnimY, {
+              toValue: 0,
+              duration: 3000,
+              easing: Easing.inOut(Easing.sin),
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.timing(floatingAnimX, {
+              toValue: 1,
+              duration: 3500,
+              easing: Easing.inOut(Easing.sin),
+              useNativeDriver: true,
+            }),
+            Animated.timing(floatingAnimX, {
+              toValue: 0,
+              duration: 3500,
+              easing: Easing.inOut(Easing.sin),
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+      floatingAnimation.start();
+      return () => floatingAnimation.stop();
+    }
+  }, [gameState]);
+
+  useEffect(() => {
     if (hasWon) {
-      // Start confetti animation
       confettiParticles.forEach(particle => {
         Animated.sequence([
           Animated.timing(particle.opacity, {
@@ -88,8 +132,8 @@ export default function LuckyNumberGame() {
             useNativeDriver: true,
           }),
           Animated.parallel([
-            Animated.timing(particle.top, {
-              toValue: height,
+            Animated.timing(particle.translateY, {
+              toValue: height + 10,
               duration: 3000,
               easing: Easing.linear,
               useNativeDriver: true,
@@ -242,7 +286,14 @@ export default function LuckyNumberGame() {
   const renderNumberSelection = () => {
     return (
       <View style={styles.numberSelectionContainer}>
-        <Text style={styles.instructionText}>Choose Your Lucky Number</Text>
+        <LinearGradient
+          colors={['rgba(255, 215, 0, 0.2)', 'rgba(34, 0, 255, 0.1)']}
+          style={styles.instructionCard}
+        >
+          <Text style={styles.instructionTitle}>🎯 Choose Your Lucky Number!</Text>
+          <Text style={styles.instructionSubtext}>Pick the number you believe in ✨</Text>
+        </LinearGradient>
+        
         <View style={styles.numbersGrid}>
           {[1, 2, 3, 4, 5, 6].map((number) => (
             <Animated.View
@@ -254,58 +305,332 @@ export default function LuckyNumberGame() {
                 onPress={() => selectLuckyNumber(number)}
               >
                 <LinearGradient
-                  colors={['#4ECDC4', '#44A08D']}
+                  colors={['#667eea', '#764ba2', '#f093fb']}
                   style={styles.numberButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.numberButtonText}>{number}</Text>
+                  <View style={styles.numberButtonInner}>
+                    <Text style={styles.numberButtonText}>{number}</Text>
+                    <View style={styles.numberShine} />
+                  </View>
                 </LinearGradient>
               </TouchableOpacity>
             </Animated.View>
           ))}
         </View>
-        <Text style={styles.biasText}>
-          The dice is slightly biased towards your lucky number!
-        </Text>
+
+        <LinearGradient
+          colors={['rgba(16, 17, 96, 0.15)', 'rgba(76, 205, 196, 0.1)']}
+          style={styles.selectionInfoCard}
+        >
+          <View style={styles.infoRow}>
+            <MaterialIcons name="casino" size={24} color="#4ECDC4" />
+            <Text style={styles.infoText}>You get 2 chances to roll your number!</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <MaterialIcons name="monetization-on" size={24} color="#FFD700" />
+            <Text style={styles.infoText}>Win ₹{Math.floor(parseInt(stake) * 2.5)} if you succeed!</Text>
+          </View>
+        </LinearGradient>
       </View>
     );
   };
 
   const renderDice = () => {
     return (
-      <Animated.View
-        style={[
-          styles.diceContainer,
+      <View style={styles.diceGameContainer}>
+        {/* Animated background elements */}
+        <Animated.View style={[
+          styles.floatingOrb, 
+          styles.orb1,
           {
             transform: [
-              { scale: scaleAnim },
-              {
-                rotate: diceRotation.interpolate({
+              { 
+                translateY: floatingAnimY.interpolate({
                   inputRange: [0, 1],
-                  outputRange: ['0deg', '720deg'],
-                }),
+                  outputRange: [0, -20]
+                })
               },
-            ],
-          },
-        ]}
-      >
-        <LinearGradient
-          colors={
-            diceValue === luckyNumber
-              ? ['#FFD700', '#FFA500']
-              : ['#fff', '#f0f0f0']
+              {
+                translateX: floatingAnimX.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 10]
+                })
+              }
+            ]
           }
-          style={styles.dice}
-        >
-          {diceValue && (
-            <Text style={[
-              styles.diceNumber,
-              diceValue === luckyNumber && styles.diceNumberWin
+        ]} />
+
+        <Animated.View style={[
+          styles.floatingOrb, 
+          styles.orb2,
+          {
+            transform: [
+              { 
+                translateY: floatingAnimY.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 15]
+                })
+              },
+              {
+                translateX: floatingAnimX.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -10]
+                })
+              }
+            ]
+          }
+        ]} />
+
+        {/* Main game status */}
+        <View style={styles.gameStatusContainer}>
+          <LinearGradient
+            colors={['rgba(139, 92, 246, 0.3)', 'rgba(76, 205, 196, 0.2)']}
+            style={styles.gameStatusCard}
+          >
+            <View style={styles.statusRow}>
+              <View style={styles.targetNumberDisplay}>
+                <Text style={styles.targetLabel}>🎯 TARGET</Text>
+                <LinearGradient
+                  colors={['#FFD700', '#FFA500']}
+                  style={styles.targetNumberBadge}
+                >
+                  <Text style={styles.targetNumber}>{luckyNumber}</Text>
+                </LinearGradient>
+              </View>
+              
+              <View style={styles.rollsDisplay}>
+                <Text style={styles.rollsLabel}>🎲 ROLLS</Text>
+                <View style={styles.rollIndicators}>
+                  {[1, 2].map((roll) => (
+                    <View
+                      key={roll}
+                      style={[
+                        styles.rollIndicator,
+                        rollsLeft >= roll ? styles.rollActive : styles.rollUsed
+                      ]}
+                    >
+                      <MaterialIcons 
+                        name="casino" 
+                        size={16} 
+                        color={rollsLeft >= roll ? "#4ECDC4" : "#666"} 
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.prizeDisplay}>
+                <Text style={styles.prizeLabel}>💎 PRIZE</Text>
+                <Text style={styles.prizeAmount}>₹{winAmount}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Enhanced dice area */}
+        <View style={styles.diceArena}>
+          <Animated.View style={[
+            styles.diceGlowRing,
+            {
+              opacity: glowAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.3, 0.8]
+              }),
+              transform: [{
+                scale: glowAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.1]
+                })
+              }]
+            }
+          ]} />
+
+          <Animated.View
+            style={[
+              styles.diceContainer,
+              {
+                transform: [
+                  { scale: scaleAnim },
+                  {
+                    rotate: diceRotation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '720deg'],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {/* Enhanced dice glow effect */}
+            {diceValue === luckyNumber && (
+              <Animated.View style={[
+                styles.winGlow,
+                {
+                  opacity: glowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.5, 1]
+                  })
+                }
+              ]} />
+            )}
+            
+            <LinearGradient
+              colors={
+                diceValue === luckyNumber
+                  ? ['#FFD700', '#FFA500', '#FF6B35']
+                  : isRolling
+                  ? ['#8B5CF6', '#A855F7', '#C084FC']
+                  : ['#4ECDC4', '#44A08D', '#2ECC71']
+              }
+              style={styles.dice}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <View style={styles.diceInner}>
+                {diceValue && !isRolling && (
+                  <MaterialIcons
+                    name={getDiceIcon(diceValue)}
+                    size={80}
+                    color="#fff"
+                    style={styles.diceIcon}
+                  />
+                )}
+                {isRolling && (
+                  <>
+                    <MaterialIcons
+                      name="autorenew"
+                      size={80}
+                      color="#fff"
+                      style={[styles.diceIcon, styles.spinningIcon]}
+                    />
+                    <Text style={styles.rollingText}>ROLLING...</Text>
+                  </>
+                )}
+              </View>
+              <View style={styles.diceShine} />
+            </LinearGradient>
+            
+            {/* Enhanced sparkles for winning dice */}
+            {diceValue === luckyNumber && (
+              <>
+                <Animated.View style={[
+                  styles.sparkle, 
+                  { marginTop: -15, marginRight: 15, alignSelf: 'flex-end' },
+                  {
+                    transform: [{
+                      rotate: floatingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg']
+                      })
+                    }]
+                  }
+                ]}>
+                  <Text style={styles.sparkleText}>✨</Text>
+                </Animated.View>
+                <Animated.View style={[
+                  styles.sparkle, 
+                  { marginBottom: -15, marginLeft: 15, alignSelf: 'flex-start' },
+                  {
+                    transform: [{
+                      rotate: floatingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['360deg', '0deg']
+                      })
+                    }]
+                  }
+                ]}>
+                  <Text style={styles.sparkleText}>⭐</Text>
+                </Animated.View>
+                <Animated.View style={[
+                  styles.sparkle, 
+                  { marginTop: 20, marginLeft: -15, alignSelf: 'flex-start' },
+                  {
+                    transform: [{
+                      scale: floatingAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 1.3]
+                      })
+                    }]
+                  }
+                ]}>
+                  <Text style={styles.sparkleText}>💫</Text>
+                </Animated.View>
+              </>
+            )}
+          </Animated.View>
+
+          {/* Roll result message */}
+          {diceValue && !isRolling && (
+            <Animated.View style={[
+              styles.rollResultMessage,
+              {
+                opacity: scaleAnim.interpolate({
+                  inputRange: [1, 1.3],
+                  outputRange: [0, 1],
+                  extrapolate: 'clamp'
+                })
+              }
             ]}>
-              {diceValue}
-            </Text>
+              <LinearGradient
+                colors={
+                  diceValue === luckyNumber
+                    ? ['rgba(255, 215, 0, 0.3)', 'rgba(255, 165, 0, 0.2)']
+                    : ['rgba(255, 107, 107, 0.3)', 'rgba(255, 142, 83, 0.2)']
+                }
+                style={styles.resultMessageCard}
+              >
+                <Text style={styles.resultMessageText}>
+                  {diceValue === luckyNumber 
+                    ? `🎉 JACKPOT! You hit ${luckyNumber}!` 
+                    : `💔 You rolled ${diceValue}, not ${luckyNumber}`
+                  }
+                </Text>
+              </LinearGradient>
+            </Animated.View>
           )}
-        </LinearGradient>
-      </Animated.View>
+        </View>
+
+        {/* Enhanced roll history */}
+        {rollHistory.length > 0 && (
+          <View style={styles.rollHistoryContainer}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
+              style={styles.rollHistoryCard}
+            >
+              <Text style={styles.rollHistoryTitle}>🎲 Your Journey</Text>
+              <View style={styles.rollHistoryTrail}>
+                {rollHistory.map((roll, index) => (
+                  <React.Fragment key={index}>
+                    <View
+                      style={[
+                        styles.historyDot,
+                        roll === luckyNumber && styles.historyDotWin
+                      ]}
+                    >
+                      <Text style={[
+                        styles.historyDotText,
+                        roll === luckyNumber && styles.historyDotTextWin
+                      ]}>
+                        {roll}
+                      </Text>
+                      {roll === luckyNumber && (
+                        <View style={styles.winCrown}>
+                          <Text style={styles.crownText}>👑</Text>
+                        </View>
+                      )}
+                    </View>
+                    {index < rollHistory.length - 1 && (
+                      <MaterialIcons name="arrow-forward" size={20} color="#666" />
+                    )}
+                  </React.Fragment>
+                ))}
+              </View>
+            </LinearGradient>
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -316,19 +641,28 @@ export default function LuckyNumberGame() {
         { opacity: resultAnim }
       ]}>
         <LinearGradient
-          colors={hasWon ? ['#4ECDC4', '#44A08D'] : ['#FF6B6B', '#FF8E53']}
+          colors={hasWon ? ['#4ECDC4', '#44A08D', '#2ECC71'] : ['#FF6B6B', '#FF8E53', '#FF6B35']}
           style={styles.resultCard}
         >
-          <Text style={styles.resultTitle}>
-            {hasWon ? '🎉 You Won! 🎉' : '😔 Try Again'}
-          </Text>
-          <Text style={styles.resultAmount}>
-            {hasWon ? `+₹${winAmount}` : `-₹${stake}`}
-          </Text>
+          <View style={styles.resultHeader}>
+            <Text style={styles.resultEmoji}>
+              {hasWon ? '🎉' : '😔'}
+            </Text>
+            <Text style={styles.resultTitle}>
+              {hasWon ? 'JACKPOT!' : 'ALMOST THERE!'}
+            </Text>
+          </View>
+          
+          <View style={styles.resultAmountContainer}>
+            <Text style={styles.resultAmount}>
+              {hasWon ? `+₹${winAmount}` : `-₹${stake}`}
+            </Text>
+          </View>
+          
           <Text style={styles.resultSubtext}>
             {hasWon 
-              ? `Your lucky number was ${luckyNumber}!` 
-              : `You rolled: ${rollHistory.join(', ')}`
+              ? `Your lucky number ${luckyNumber} came through! 🍀` 
+              : `You rolled: ${rollHistory.join(' → ')} 🎲`
             }
           </Text>
           
@@ -337,13 +671,22 @@ export default function LuckyNumberGame() {
               style={styles.playAgainButton}
               onPress={resetGame}
             >
-              <Text style={styles.playAgainText}>Play Again</Text>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
+                style={styles.resultButtonGradient}
+              >
+                <MaterialIcons name="refresh" size={20} color="#fff" />
+                <Text style={styles.playAgainText}>Try Again</Text>
+              </LinearGradient>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.exitButton}
               onPress={() => router.back()}
             >
-              <Text style={styles.exitText}>Exit</Text>
+              <View style={styles.exitButtonInner}>
+                <MaterialIcons name="exit-to-app" size={20} color="#fff" />
+                <Text style={styles.exitText}>Exit</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -353,9 +696,16 @@ export default function LuckyNumberGame() {
 
   return (
     <LinearGradient
-      colors={['#1a1a2e', '#16213e', '#0f3460']}
+      colors={['#1a1a2e', '#16213e', '#0f3460', '#533483']}
       style={styles.container}
     >
+      {/* Floating background elements */}
+      <View style={styles.backgroundElements}>
+        <Animated.View style={[styles.floatingElement, styles.element1]} />
+        <Animated.View style={[styles.floatingElement, styles.element2]} />
+        <Animated.View style={[styles.floatingElement, styles.element3]} />
+      </View>
+
       {/* Confetti */}
       {hasWon && confettiParticles.map(particle => (
         <Animated.View
@@ -363,14 +713,16 @@ export default function LuckyNumberGame() {
           style={[
             styles.confetti,
             {
-              left: particle.left,
-              top: particle.top,
               backgroundColor: particle.color,
               transform: [
-                { rotate: particle.rotation.interpolate({
-                  inputRange: [0, 360],
-                  outputRange: ['0deg', '360deg']
-                })},
+                { translateX: particle.translateX },
+                { translateY: particle.translateY },
+                { 
+                  rotate: particle.rotation.interpolate({
+                    inputRange: [0, 360],
+                    outputRange: ['0deg', '360deg']
+                  })
+                },
                 { scale: particle.scale }
               ],
               opacity: particle.opacity,
@@ -379,106 +731,75 @@ export default function LuckyNumberGame() {
         />
       ))}
 
-      {/* Header */}
+      {/* Enhanced Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.gameTitle}>Lucky Number</Text>
-        <View style={styles.stakeInfo}>
+        
+        <View style={styles.titleContainer}>
+          <Text style={styles.gameTitle}>LUCKY NUMBER</Text>
+        </View>
+        
+        <View style={styles.stakeContainer}>
+          <MaterialIcons name="monetization-on" size={20} color="#FFD700" />
           <Text style={styles.stakeText}>₹{stake}</Text>
         </View>
       </View>
 
-      {/* Game Info */}
-      {luckyNumber && !showResult && (
-        <View style={styles.gameInfo}>
-          <View style={styles.luckyNumberDisplay}>
-            <Text style={styles.luckyNumberLabel}>Lucky Number:</Text>
-            <View style={styles.luckyNumberBadge}>
-              <Text style={styles.luckyNumberText}>{luckyNumber}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.rollsInfo}>
-            <Text style={styles.rollsLabel}>Rolls Left:</Text>
-            <View style={styles.rollsDots}>
-              {[1, 2].map((roll) => (
-                <View
-                  key={roll}
-                  style={[
-                    styles.rollDot,
-                    rollsLeft >= roll ? styles.rollDotActive : styles.rollDotInactive
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
-        </View>
-      )}
-
       {/* Main Game Area */}
       <View style={styles.gameArea}>
         {gameState === 'selecting' && renderNumberSelection()}
-        
-        {gameState === 'rolling' && !showResult && (
-          <View style={styles.diceSection}>
-            {renderDice()}
-
-            {rollHistory.length > 0 && (
-              <View style={styles.rollHistory}>
-                <Text style={styles.rollHistoryLabel}>Your Rolls:</Text>
-                <View style={styles.rollHistoryNumbers}>
-                  {rollHistory.map((roll, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.historyNumber,
-                        roll === luckyNumber && styles.historyNumberWin
-                      ]}
-                    >
-                      <Text style={styles.historyNumberText}>{roll}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-
+        {gameState === 'rolling' && !showResult && renderDice()}
         {showResult && renderResult()}
       </View>
 
-      {/* Action Button */}
+      {/* Enhanced Action Button */}
       {gameState === 'rolling' && rollsLeft > 0 && !showResult && !isCheckingResult && (
         <View style={styles.actionContainer}>
           <TouchableOpacity
             style={[styles.rollButton, isRolling && styles.rollButtonDisabled]}
             onPress={rollDice}
             disabled={isRolling}
+            activeOpacity={0.8}
           >
             <LinearGradient
-              colors={['#4ECDC4', '#44A08D']}
+              colors={['#4ECDC4', '#44A08D', '#2ECC71']}
               style={styles.rollButtonGradient}
             >
-              <MaterialIcons name="casino" size={24} color="#fff" />
-              <Text style={styles.rollButtonText}>
-                {isRolling ? 'Rolling...' : `Roll Dice (${rollsLeft} left)`}
-              </Text>
+              <View style={styles.rollButtonContent}>
+                <MaterialIcons 
+                  name={isRolling ? "autorenew" : "casino"} 
+                  size={28} 
+                  color="#fff" 
+                />
+                <View style={styles.rollButtonTextContainer}>
+                  <Text style={styles.rollButtonText}>
+                    {isRolling ? 'ROLLING...' : 'ROLL DICE'}
+                  </Text>
+                  <Text style={styles.rollButtonSubtext}>
+                    {isRolling ? 'Good luck! 🤞' : `${rollsLeft} chance${rollsLeft > 1 ? 's' : ''} left`}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.rollButtonGlow} />
             </LinearGradient>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Game Rules */}
-      {!showResult && !isCheckingResult && (
+      {/* Enhanced Game Rules - only show on selection screen */}
+      {gameState === 'selecting' && (
         <View style={styles.rulesContainer}>
-          <Text style={styles.rulesText}>
-            {gameState === 'selecting' 
-              ? 'Choose a number from 1-6. You get 2 rolls to hit it!'
-              : `Roll your lucky number ${luckyNumber} to win ₹${winAmount}!`
-            }
-          </Text>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
+            style={styles.rulesCard}
+          >
+            <MaterialIcons name="info" size={20} color="#4ECDC4" />
+            <Text style={styles.rulesText}>
+              Choose your lucky number and get 2 chances to roll it! Hit your number to win 2.5x your stake! 🎯
+            </Text>
+          </LinearGradient>
         </View>
       )}
     </LinearGradient>
@@ -489,6 +810,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  backgroundElements: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  floatingElement: {
+    position: 'absolute',
+    borderRadius: 100,
+    opacity: 0.05,
+  },
+  element1: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#4ECDC4',
+    marginTop: -50,
+    marginLeft: -50,
+  },
+  element2: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#FFD700',
+    marginTop: 200,
+    marginRight: -30,
+    alignSelf: 'flex-end',
+  },
+  element3: {
+    width: 180,
+    height: 180,
+    backgroundColor: '#8B5CF6',
+    marginBottom: 100,
+    marginLeft: -40,
+    alignSelf: 'flex-end',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -498,309 +854,666 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    width: 60,
+  },
+  titleContainer: {
+    alignItems: 'center',
+    flex: 1,
+    marginHorizontal: 15,
   },
   gameTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#4ECDC4',
+    textAlign: 'center',
+    textShadowColor: 'rgba(255, 215, 0, 0.7)',
+    textShadowOffset: { 
+      width: 0, 
+      height: 2
+    },
+    textShadowRadius: 25,
+    letterSpacing: 2,
+    fontStyle: 'italic',
+    transform: [{ rotate: '-2deg' }],
+    position: 'relative',
+    paddingHorizontal: 1,
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 15
   },
-  stakeInfo: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+  stakeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#FFD700',
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    minWidth: 80,
+    justifyContent: 'center',
   },
   stakeText: {
     color: '#FFD700',
     fontWeight: 'bold',
-  },
-  gameInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  luckyNumberDisplay: {
-    alignItems: 'center',
-  },
-  luckyNumberLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 5,
-  },
-  luckyNumberBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderWidth: 1,
-    borderColor: '#FFD700',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  luckyNumberText: {
-    color: '#FFD700',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  rollsInfo: {
-    alignItems: 'center',
-  },
-  rollsLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 5,
-  },
-  rollsDots: {
-    flexDirection: 'row',
-  },
-  rollDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginHorizontal: 2,
-  },
-  rollDotActive: {
-    backgroundColor: '#4ECDC4',
-  },
-  rollDotInactive: {
-    backgroundColor: '#666',
+    fontSize: 14,
+    marginLeft: 4,
   },
   gameArea: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Number Selection Screen Styles
   numberSelectionContainer: {
     alignItems: 'center',
     paddingHorizontal: 20,
+    width: '100%',
   },
-  instructionText: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  instructionCard: {
+    padding: 25,
+    alignItems: 'center',
+    marginBottom: 40,
+    width: '100%',
+  },
+  instructionTitle: {
+    fontSize: 28,
+    fontWeight: '900',
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 8,
+    textShadowColor: 'rgba(255, 215, 0, 1)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 15,
+    letterSpacing: 1,
+  },
+  instructionSubtext: {
+    fontSize: 16,
+    color: '#FFD700',
+    textAlign: 'center',
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   numbersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 15,
+    gap: 20,
+    marginBottom: 35,
   },
   numberButton: {
-    borderRadius: 15,
+    borderRadius: 25,
     overflow: 'hidden',
-    margin: 5,
-    elevation: 5,
+    elevation: 10,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   numberButtonGradient: {
-    width: 80,
-    height: 80,
+    width: 90,
+    height: 90,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  numberButtonInner: {
+    width: '88%',
+    height: '88%',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    position: 'relative',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
   numberButtonText: {
     color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 36,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
   },
-  biasText: {
-    color: '#FFD700',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 20,
-    fontStyle: 'italic',
+  numberShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
-  diceSection: {
+  selectionInfoCard: {
+    padding: 20,
+    width: '100%'
+  },
+  infoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  infoText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 12,
+    flex: 1,
+  },
+
+  // Dice Screen Styles
+  diceGameContainer: {
+    flex: 1,
     width: '100%',
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  floatingOrb: {
+    position: 'absolute',
+    borderRadius: 50,
+    opacity: 0.1,
+  },
+  orb1: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#FFD700',
+    marginTop: height * 0.2,
+    marginLeft: width * 0.1,
+  },
+  orb2: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#4ECDC4',
+    marginTop: height * 0.6,
+    marginRight: width * 0.15,
+    alignSelf: 'flex-end',
+  },
+  gameStatusContainer: {
+    width: '100%',
+    marginBottom: 30,
+  },
+  gameStatusCard: {
+    padding: 20,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  targetNumberDisplay: {
+    alignItems: 'center',
+  },
+  targetLabel: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+    letterSpacing: 1,
+  },
+  targetNumberBadge: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  targetNumber: {
+    color: '#1a1a2e',
+    fontWeight: '900',
+    fontSize: 24,
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  rollsDisplay: {
+    alignItems: 'center',
+  },
+  rollsLabel: {
+    color: '#4ECDC4',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+    letterSpacing: 1,
+  },
+  rollIndicators: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  rollIndicator: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  rollActive: {
+    backgroundColor: 'rgba(76, 205, 196, 0.3)',
+    borderColor: '#4ECDC4',
+  },
+  rollUsed: {
+    backgroundColor: 'rgba(102, 102, 102, 0.3)',
+    borderColor: '#666',
+  },
+  prizeDisplay: {
+    alignItems: 'center',
+  },
+  prizeLabel: {
+    color: '#8B5CF6',
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+    letterSpacing: 1,
+  },
+  prizeAmount: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    textShadowColor: 'rgba(139, 92, 246, 0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  diceArena: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 30,
+    position: 'relative',
+    minHeight: 200,
+  },
+  diceGlowRing: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 3,
+    borderColor: 'rgba(76, 205, 196, 0.5)',
+    backgroundColor: 'rgba(76, 205, 196, 0.1)',
   },
   diceContainer: {
-    marginBottom: 20,
+    position: 'relative',
+    zIndex: 2,
+  },
+  winGlow: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 215, 0, 0.4)',
+    top: -20,
+    left: -20,
+    zIndex: -1,
   },
   dice: {
-    width: 120,
-    height: 120,
-    borderRadius: 20,
+    width: 140,
+    height: 140,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
-    shadowRadius: 6,
+    shadowRadius: 12,
+    position: 'relative',
   },
-  diceNumber: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  diceNumberWin: {
-    color: '#1a1a2e',
-  },
-  rollHistory: {
-    alignItems: 'center',
-    marginTop: 20,
-    width: '100%',
-  },
-  rollHistoryLabel: {
-    color: '#888',
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  rollHistoryNumbers: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-  historyNumber: {
-    width: 40,
-    height: 40,
+  diceInner: {
+    width: '90%',
+    height: '90%',
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  historyNumberWin: {
-    backgroundColor: 'rgba(255, 215, 0, 0.3)',
-    borderWidth: 1,
-    borderColor: '#FFD700',
+  diceIcon: {
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
-  historyNumberText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  spinningIcon: {
+    // Add spinning animation if needed
+  },
+  rollingText: {
     color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
-  resultContainer: {
+  diceShine: {
     position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  sparkle: {
+    position: 'absolute',
+  },
+  sparkleText: {
+    fontSize: 25,
+    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+  rollResultMessage: {
+    position: 'absolute',
+    marginBottom: -60,
+    width: '120%',
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  resultMessageCard: {
+    padding: 15,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+  },
+  resultMessageText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  rollHistoryContainer: {
+    width: '100%',
+    marginTop: 20,
+  },
+  rollHistoryCard: {
+    padding: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  rollHistoryTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 15,
+    textShadowColor: 'rgba(139, 92, 246, 0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+    letterSpacing: 1,
+  },
+  rollHistoryTrail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  historyDot: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  historyDotWin: {
+    backgroundColor: 'rgba(255, 215, 0, 0.4)',
+    borderColor: '#FFD700',
+    borderWidth: 3,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  historyDotText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  historyDotTextWin: {
+    color: '#FFD700',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
+  },
+  winCrown: {
+    position: 'absolute',
+    marginTop: -12,
+    marginRight: -8,
+    alignSelf: 'flex-end',
+  },
+  crownText: {
+    fontSize: 18,
+  },
+
+  // Result Screen Styles
+  resultContainer: {
     width: '100%',
     paddingHorizontal: 20,
     zIndex: 10,
   },
   resultCard: {
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 25,
+    padding: 30,
     alignItems: 'center',
-    elevation: 10,
+    elevation: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+  },
+  resultHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  resultEmoji: {
+    fontSize: 60,
+    marginBottom: 10,
   },
   resultTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  resultAmountContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 15,
+    marginBottom: 20,
   },
   resultAmount: {
     fontSize: 36,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 15,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   resultSubtext: {
     fontSize: 16,
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 25,
+    opacity: 0.9,
   },
   resultButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginTop: 10,
+    gap: 15,
   },
   playAgainButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 10,
     flex: 1,
-    marginRight: 10,
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  resultButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
   },
   playAgainText: {
     color: '#fff',
     fontWeight: 'bold',
-    textAlign: 'center',
+    fontSize: 16,
+    marginLeft: 8,
   },
   exitButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 10,
     flex: 1,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  exitButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
   },
   exitText: {
     color: '#fff',
     fontWeight: 'bold',
-    textAlign: 'center',
+    fontSize: 16,
+    marginLeft: 8,
   },
+
+  // Action Button Styles
   actionContainer: {
     paddingHorizontal: 20,
     marginBottom: 20,
   },
   rollButton: {
-    borderRadius: 15,
+    borderRadius: 25,
     overflow: 'hidden',
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
   },
   rollButtonDisabled: {
     opacity: 0.7,
   },
   rollButtonGradient: {
+    paddingVertical: 20,
+    paddingHorizontal: 30,
+    position: 'relative',
+  },
+  rollButtonContent: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 15,
+    justifyContent: 'center',
+  },
+  rollButtonTextContainer: {
+    marginLeft: 15,
+    alignItems: 'center',
   },
   rollButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
-  rulesContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+  rollButtonSubtext: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
-  rulesText: {
-    color: '#888',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  confetti: {
-    position: 'absolute',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  checkingResultOverlay: {
+  rollButtonGlow: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 25,
   },
-  checkingResultText: {
+
+  // Rules Container Styles
+  rulesContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+  },
+  rulesCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    width: '100%',
+  },
+  rulesText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginLeft: 10,
+    flex: 1,
+  },
+
+  // Confetti Styles
+  confetti: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    left: '50%',  // Start from center
+    top: 0,
   },
 });
