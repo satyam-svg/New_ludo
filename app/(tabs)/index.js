@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,16 @@ import {
   ScrollView,
   Dimensions,
   Animated,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -23,7 +26,11 @@ export default function HomeScreen() {
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedStake, setSelectedStake] = useState(null);
   const [showGames, setShowGames] = useState(true);
-  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [balance, setBalance] = useState(0);
+  const [email, setEmail] = useState('');
+  
+  const { user, updateWallet } = useAuth();
 
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
   const slideAnim = React.useRef(new Animated.Value(0)).current;
@@ -47,6 +54,50 @@ export default function HomeScreen() {
     }
   ];
 
+  useFocusEffect(
+    React.useCallback(() => {
+      const fetchUserData = async () => {
+        try {
+          setIsLoading(true);
+          const token = await AsyncStorage.getItem('authToken');
+          if (!token) {
+            throw new Error('No authentication token found');
+          }
+          
+          const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (!response.ok) throw new Error('Failed to fetch user data');
+          
+          const data = await response.json();
+          setBalance(data.wallet);
+          setEmail(data.email);
+          
+          // Update wallet in global context
+          updateWallet(data.wallet);
+        } catch (error) {
+          console.error('User data fetch error:', error);
+          Alert.alert('Error', error.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchUserData();
+    }, [])
+  );
+
+  useEffect(() => {
+    // Initialize with context data if available
+    if (user) {
+      setBalance(user.wallet || 0);
+      setEmail(user.email || '');
+    }
+  }, [user]);
+
   const handleGameSelect = (game) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedGame(game);
@@ -63,7 +114,7 @@ export default function HomeScreen() {
   };
 
   const handleStakeSelect = (stake) => {
-    if (user.wallet < stake) {
+    if (balance < stake) {
       Alert.alert('Insufficient Balance', `You need ₹${stake} to play this game. Please add money to your wallet.`);
       return;
     }
@@ -111,14 +162,6 @@ export default function HomeScreen() {
     }).start();
   };
 
-  const resetToGames = () => {
-    // This function can be called when game finishes
-    setSelectedGame(null);
-    setSelectedStake(null);
-    setShowGames(true);
-    slideAnim.setValue(0);
-  };
-
   return (
     <LinearGradient
       colors={['#1a1a2e', '#16213e']}
@@ -128,13 +171,18 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.welcomeText}>Welcome back!</Text>
-          <Text style={styles.emailText}>{user?.email}</Text>
-          <View style={styles.balanceContainer}>
-            <MaterialIcons name="account-balance-wallet" size={20} color="#FFD700" />
-            <Text style={styles.balanceText}>₹{user?.wallet || 0}</Text>
-          </View>
+          <Text style={styles.emailText}>{email}</Text>
+          
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#FFD700" />
+          ) : (
+            <View style={styles.balanceContainer}>
+              <MaterialIcons name="account-balance-wallet" size={20} color="#FFD700" />
+              <Text style={styles.balanceText}>₹{balance}</Text>
+            </View>
+          )}
         </View>
-
+        
         {/* Conditional Content Based on Flow */}
         {showGames ? (
           // Game Selection Screen
@@ -145,7 +193,6 @@ export default function HomeScreen() {
                 <Text style={styles.heroTitle}>Ready to Play?</Text>
                 <Text style={styles.heroSubtitle}>Choose your game and start winning!</Text>
               </View>
-              
             </View>
 
             {/* Game Selection */}
@@ -295,22 +342,22 @@ export default function HomeScreen() {
                     style={[
                       styles.stakeCard,
                       selectedStake === stake && styles.stakeCardSelected,
-                      user.wallet < stake && styles.stakeCardDisabled
+                      balance < stake && styles.stakeCardDisabled
                     ]}
                     onPress={() => handleStakeSelect(stake)}
-                    disabled={user.wallet < stake}
+                    disabled={balance < stake}
                   >
                     <Text style={[
                       styles.stakeAmount,
                       selectedStake === stake && styles.stakeAmountSelected,
-                      user.wallet < stake && styles.stakeAmountDisabled
+                      balance < stake && styles.stakeAmountDisabled
                     ]}>
                       ₹{stake}
                     </Text>
                     {selectedStake === stake && (
                       <MaterialIcons name="check-circle" size={16} color="#FFD700" />
                     )}
-                    {user.wallet < stake && (
+                    {balance < stake && (
                       <MaterialIcons name="lock" size={16} color="#888" />
                     )}
                   </TouchableOpacity>
@@ -589,39 +636,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#888',
     textAlign: 'center',
-  },
-  heroIcons: {
-    position: 'relative',
-    width: 100,
-    height: 60,
-  },
-  floatingIcon: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  floatingIcon2: {
-    top: 20,
-    right: 0,
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
-  },
-  floatingIcon3: {
-    top: 40,
-    left: 20,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
   },
   // Features Section Styles
   featuresSection: {

@@ -1,21 +1,18 @@
 // hooks/useAuth.js
-import React from 'react';
+import React, { useState } from 'react';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 
 const AuthContext = React.createContext();
 
 export function useAuth() {
-  const context = React.useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return React.useContext(AuthContext);
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null); // Add token state
+  const [isLoading, setIsLoading] = useState(true);
 
   React.useEffect(() => {
     loadStoredAuth();
@@ -23,9 +20,11 @@ export function AuthProvider({ children }) {
 
   const loadStoredAuth = async () => {
     try {
-      const storedUser = await SecureStore.getItemAsync('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      const storedToken = await SecureStore.getItemAsync('authToken');
+      if (storedToken) {
+        setToken(storedToken);
+        const userData = await fetchUserData(storedToken);
+        setUser(userData);
         router.replace('/(tabs)');
       } else {
         router.replace('/(auth)/login');
@@ -37,21 +36,28 @@ export function AuthProvider({ children }) {
     setIsLoading(false);
   };
 
-  const login = async (email, otp, referralCode = null) => {
+  const fetchUserData = async (authToken) => {
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch('http://192.168.200.235:5000/api/users/me', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
       
-      const userData = {
-        id: Date.now().toString(),
-        email,
-        wallet: 1000, // Starting bonus
-        joinedAt: new Date().toISOString(),
-        referralCode: referralCode || null,
-        ownReferralCode: generateReferralCode()
-      };
+      if (!response.ok) throw new Error('Failed to fetch user data');
+      
+      return await response.json();
+    } catch (error) {
+      console.error('User data fetch error:', error);
+      return null;
+    }
+  };
 
-      await SecureStore.setItemAsync('user', JSON.stringify(userData));
+  const login = async (authToken) => {
+    try {
+      await SecureStore.setItemAsync('authToken', authToken);
+      setToken(authToken);
+      const userData = await fetchUserData(authToken);
       setUser(userData);
       router.replace('/(tabs)');
       return { success: true };
@@ -60,31 +66,28 @@ export function AuthProvider({ children }) {
     }
   };
 
+
   const logout = async () => {
     try {
-      await SecureStore.deleteItemAsync('user');
+      await SecureStore.deleteItemAsync('authToken');
       setUser(null);
       router.replace('/(auth)/login');
     } catch (error) {
-      console.log('Error logging out:', error);
+      console.log('Logout error:', error);
     }
   };
 
-  const updateWallet = async (newBalance) => {
+  const updateWallet = (newBalance) => {
     if (user) {
       const updatedUser = { ...user, wallet: newBalance };
-      await SecureStore.setItemAsync('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
     }
-  };
-
-  const generateReferralCode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
   };
 
   return (
     <AuthContext.Provider value={{
       user,
+      token, // Expose token
       login,
       logout,
       updateWallet,

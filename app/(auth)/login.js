@@ -1,4 +1,3 @@
-// app/(auth)/login.js
 import React, { useState } from 'react';
 import {
   View,
@@ -17,17 +16,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Add this import
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'https://ludo-backend-8nbg.onrender.com/api/users';
+const API_BASE_URL = 'http://192.168.1.2:5000/api/users';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [referralCode, setReferralCode] = useState('');
-  const [showOtp, setShowOtp] = useState(false);
-  const [showReferral, setShowReferral] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // States for OTP flow
+  const [showOtpField, setShowOtpField] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  
   const { login } = useAuth();
 
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -48,32 +53,124 @@ export default function LoginScreen() {
     ]).start();
   }, []);
 
-  const handleSendOtp = async () => {
+  const validateForm = () => {
     if (!email.includes('@')) {
       Alert.alert('Error', 'Please enter a valid email address');
-      return;
+      return false;
     }
 
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return false;
+    }
+
+    if (isSignUp && password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Send OTP for signup
+  const sendOtp = async () => {
+    if (!validateForm()) return;
+    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/send-otp`, {
+      const response = await fetch(`${API_BASE_URL}/signin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ 
+          email, 
+          password
+        }),
       });
 
       const data = await response.json();
-
+      
       if (!response.ok) {
         throw new Error(data.message || 'Failed to send OTP');
       }
+      
+      Alert.alert('OTP Sent', 'Check your email for the verification code');
+      setShowOtpField(true);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      setShowOtp(true);
-      Alert.alert('OTP Sent', 'Please check your email for the OTP code');
+  // Verify OTP and complete signup
+  const verifyOtpAndSignup = async () => {
+    if (otp.length !== 6) {
+      Alert.alert('Error', 'Please enter a valid 6-digit OTP');
+      return;
+    }
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setIsVerifying(true);
+    
+    try {
+      // Verify OTP and create account
+      const verifyResponse = await fetch(`${API_BASE_URL}/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, otp }),
+      });
+
+      const verifyData = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(verifyData.message);
+      
+      // Store token in AsyncStorage
+      await AsyncStorage.setItem('authToken', verifyData.token);
+      
+      // Login after successful signup
+      const result = await login(verifyData.token);
+      
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Something went wrong');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // Handle login
+  const handleLogin = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLoading(true);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      // Store token in AsyncStorage
+      await AsyncStorage.setItem('authToken', data.token);
+      
+      // Login after successful authentication
+      const result = await login(data.token);
+      
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+      }
     } catch (error) {
       Alert.alert('Error', error.message || 'Something went wrong');
     } finally {
@@ -81,45 +178,29 @@ export default function LoginScreen() {
     }
   };
 
-  const handleLogin = async () => {
-    if (!otp) {
-      Alert.alert('Error', 'Please enter the OTP');
-      return;
-    }
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setLoading(true);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/verify-otp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email, 
-          otp,
-          referralCode: referralCode || undefined
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Verification failed');
+  // Unified auth handler
+  const handleAuth = async () => {
+    if (!validateForm()) return;
+    
+    if (isSignUp) {
+      if (!showOtpField) {
+        // First step of signup: send OTP
+        await sendOtp();
+      } else {
+        // Second step: verify OTP and signup
+        await verifyOtpAndSignup();
       }
-
-      // Call auth context login with actual API response data
-      const result = await login(data.token, data.user);
-      
-      if (!result.success) {
-        Alert.alert('Login Failed', result.error);
-      }
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Login failed. Please try again.');
-    } finally {
-      setLoading(false);
+    } else {
+      // Regular login
+      await handleLogin();
     }
+  };
+
+  // Reset OTP flow when toggling
+  const toggleAuthMode = () => {
+    setIsSignUp(!isSignUp);
+    setShowOtpField(false);
+    setOtp('');
   };
 
   return (
@@ -157,8 +238,18 @@ export default function LoginScreen() {
 
             {/* Card Container */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Welcome Back!</Text>
-              <Text style={styles.cardSubtitle}>Sign in to continue playing</Text>
+              <Text style={styles.cardTitle}>
+                {isSignUp 
+                  ? (showOtpField ? 'Verify Your Email' : 'Create Account') 
+                  : 'Welcome Back!'}
+              </Text>
+              <Text style={styles.cardSubtitle}>
+                {isSignUp 
+                  ? (showOtpField 
+                      ? 'Enter the OTP sent to your email' 
+                      : 'Sign up to get started') 
+                  : 'Sign in to continue playing'}
+              </Text>
 
               {/* Email Input */}
               <View style={styles.inputGroup}>
@@ -173,84 +264,118 @@ export default function LoginScreen() {
                     onChangeText={setEmail}
                     keyboardType="email-address"
                     autoCapitalize="none"
-                    editable={!showOtp}
+                    editable={!showOtpField}
                   />
                 </View>
               </View>
 
-              {/* OTP Input */}
-              {showOtp && (
+              {/* Password Inputs (hidden during OTP verification) */}
+              {!showOtpField && (
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Password</Text>
+                    <View style={styles.inputContainer}>
+                      <MaterialIcons name="lock" size={20} color="#9ca3af" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter your password"
+                        placeholderTextColor="#9ca3af"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                      />
+                    </View>
+                  </View>
+
+                 
+                  {isSignUp && (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Confirm Password</Text>
+                      <View style={styles.inputContainer}>
+                        <MaterialIcons name="lock-outline" size={20} color="#9ca3af" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Confirm your password"
+                          placeholderTextColor="#9ca3af"
+                          value={confirmPassword}
+                          onChangeText={setConfirmPassword}
+                          secureTextEntry
+                        />
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* OTP Input (only shown during signup verification) */}
+              {isSignUp && showOtpField && (
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Verification Code</Text>
                   <View style={styles.inputContainer}>
-                    <MaterialIcons name="lock" size={20} color="#9ca3af" style={styles.inputIcon} />
+                    <MaterialIcons name="verified-user" size={20} color="#9ca3af" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="Enter 6-digit code"
+                      placeholder="Enter 6-digit OTP"
                       placeholderTextColor="#9ca3af"
                       value={otp}
                       onChangeText={setOtp}
-                      keyboardType="numeric"
+                      keyboardType="number-pad"
                       maxLength={6}
                     />
                   </View>
-                  <Text style={styles.otpHint}>We sent a code to {email}</Text>
-                </View>
-              )}
-
-              {/* Referral Toggle */}
-              <TouchableOpacity
-                style={styles.referralToggle}
-                onPress={() => setShowReferral(!showReferral)}
-              >
-                <MaterialIcons 
-                  name="card-giftcard" 
-                  size={16} 
-                  color="#667eea" 
-                />
-                <Text style={styles.referralToggleText}>
-                  {showReferral ? 'Hide' : 'Have a referral code?'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Referral Input */}
-              {showReferral && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Referral Code (Optional)</Text>
-                  <View style={styles.inputContainer}>
-                    <MaterialIcons name="card-giftcard" size={20} color="#9ca3af" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter referral code"
-                      placeholderTextColor="#9ca3af"
-                      value={referralCode}
-                      onChangeText={setReferralCode}
-                      autoCapitalize="characters"
-                    />
-                  </View>
+                  <Text style={styles.otpHint}>
+                    Check your email for the verification code
+                  </Text>
                 </View>
               )}
 
               {/* Action Button */}
               <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={showOtp ? handleLogin : handleSendOtp}
-                disabled={loading}
+                style={[styles.button, (loading || isVerifying) && styles.buttonDisabled]}
+                onPress={handleAuth}
+                disabled={loading || isVerifying}
               >
                 <LinearGradient
                   colors={['#667eea', '#764ba2']}
                   style={styles.buttonGradient}
                 >
-                  {loading ? (
+                  {(loading || isVerifying) ? (
                     <View style={styles.loadingContainer}>
                       <Text style={styles.buttonText}>Please wait...</Text>
                     </View>
                   ) : (
                     <Text style={styles.buttonText}>
-                      {showOtp ? 'Sign In' : 'Send Verification Code'}
+                      {isSignUp
+                        ? (showOtpField ? 'Verify & Sign Up' : 'Send OTP')
+                        : 'Sign In'}
                     </Text>
                   )}
                 </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Resend OTP option */}
+              {isSignUp && showOtpField && (
+                <TouchableOpacity
+                  style={styles.resendContainer}
+                  onPress={sendOtp}
+                  disabled={loading}
+                >
+                  <Text style={styles.resendText}>
+                    Didn't receive code? <Text style={styles.resendLink}>Resend OTP</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Toggle between Sign In/Sign Up */}
+              <TouchableOpacity
+                style={styles.toggleContainer}
+                onPress={toggleAuthMode}
+              >
+                <Text style={styles.toggleText}>
+                  {isSignUp 
+                    ? 'Already have an account? Sign In' 
+                    : "Don't have an account? Sign Up"}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -280,6 +405,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 40,
+  },
+  toggleContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  toggleText: {
+    color: '#667eea',
+    fontWeight: '600',
   },
   header: {
     alignItems: 'center',
@@ -373,18 +506,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginLeft: 4,
   },
-  referralToggle: {
-    flexDirection: 'row',
+  resendContainer: {
+    marginTop: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    paddingVertical: 8,
   },
-  referralToggleText: {
-    color: '#667eea',
+  resendText: {
+    color: '#6b7280',
     fontSize: 14,
+  },
+  resendLink: {
+    color: '#667eea',
     fontWeight: '600',
-    marginLeft: 6,
   },
   button: {
     borderRadius: 16,

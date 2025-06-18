@@ -1,5 +1,5 @@
 // app/(tabs)/profile.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,19 +8,85 @@ import {
   ScrollView,
   Alert,
   Dimensions,
-  Share,
-  Clipboard
+  Share
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 
 const { width } = Dimensions.get('window');
+const API_BASE_URL = 'http://192.168.1.2:5000/api/users';
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateWallet } = useAuth();
   const [showReferralCode, setShowReferralCode] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({
+    sixKingWins: 0,
+    luckyNumberWins: 0,
+    totalWinnings: 0
+  });
+
+  // Fetch user stats
+  const fetchUserStats = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+      
+      const response = await fetch(`${API_BASE_URL}/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch stats');
+      
+      setStats({
+        sixKingWins: data.sixKingWins || 0,
+        luckyNumberWins: data.luckyNumberWins || 0,
+        totalWinnings: data.totalWinnings || 0
+      });
+    } catch (error) {
+      console.error('Stats fetch error:', error);
+      Alert.alert('Error', 'Failed to load game statistics');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch user data
+  const fetchUserData = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+      
+      const response = await fetch(`${API_BASE_URL}/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch user data');
+      
+      // Update global wallet balance
+      updateWallet(data.wallet);
+    } catch (error) {
+      console.error('User data fetch error:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserData();
+    fetchUserStats();
+  }, []);
 
   const handleLogout = () => {
     Alert.alert(
@@ -122,7 +188,7 @@ export default function ProfileScreen() {
             <View style={styles.profileInfo}>
               <Text style={styles.profileEmail}>{user?.email}</Text>
               <Text style={styles.profileJoinDate}>
-                Joined {formatDate(user?.joinedAt)}
+                Joined {user?.joinedAt ? formatDate(user.joinedAt) : 'recently'}
               </Text>
               <View style={styles.balanceContainer}>
                 <MaterialIcons name="account-balance-wallet" size={16} color="#fff" />
@@ -162,10 +228,11 @@ export default function ProfileScreen() {
                   <View style={styles.referralCodeContainer}>
                     <Text style={styles.referralCodeLabel}>Your Referral Code:</Text>
                     <View style={styles.referralCodeBox}>
-                      <Text style={styles.referralCode}>{user?.ownReferralCode}</Text>
+                      <Text style={styles.referralCode}>{user?.ownReferralCode || 'LOADING...'}</Text>
                       <TouchableOpacity 
                         style={styles.copyButton}
                         onPress={handleCopyReferralCode}
+                        disabled={!user?.ownReferralCode}
                       >
                         <MaterialIcons name="content-copy" size={16} color="#1a1a2e" />
                       </TouchableOpacity>
@@ -175,6 +242,7 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     style={styles.shareButton}
                     onPress={handleShareReferral}
+                    disabled={!user?.ownReferralCode}
                   >
                     <MaterialIcons name="share" size={18} color="#1a1a2e" />
                     <Text style={styles.shareButtonText}>Share with Friends</Text>
@@ -188,25 +256,31 @@ export default function ProfileScreen() {
         {/* Game Stats */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Game Statistics</Text>
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <MaterialIcons name="casino" size={24} color="#4ECDC4" />
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Six King Wins</Text>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading statistics...</Text>
             </View>
-            
-            <View style={styles.statCard}>
-              <MaterialIcons name="stars" size={24} color="#FFD700" />
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Lucky Number Wins</Text>
+          ) : (
+            <View style={styles.statsContainer}>
+              <View style={styles.statCard}>
+                <MaterialIcons name="casino" size={24} color="#4ECDC4" />
+                <Text style={styles.statNumber}>{stats.sixKingWins}</Text>
+                <Text style={styles.statLabel}>Six King Wins</Text>
+              </View>
+              
+              <View style={styles.statCard}>
+                <MaterialIcons name="stars" size={24} color="#FFD700" />
+                <Text style={styles.statNumber}>{stats.luckyNumberWins}</Text>
+                <Text style={styles.statLabel}>Lucky Number Wins</Text>
+              </View>
+              
+              <View style={styles.statCard}>
+                <MaterialIcons name="trending-up" size={24} color="#FF6B6B" />
+                <Text style={styles.statNumber}>₹{stats.totalWinnings}</Text>
+                <Text style={styles.statLabel}>Total Winnings</Text>
+              </View>
             </View>
-            
-            <View style={styles.statCard}>
-              <MaterialIcons name="trending-up" size={24} color="#FF6B6B" />
-              <Text style={styles.statNumber}>₹0</Text>
-              <Text style={styles.statLabel}>Total Winnings</Text>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Options */}
@@ -500,5 +574,14 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 20,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#888',
+    fontSize: 14,
   },
 });
