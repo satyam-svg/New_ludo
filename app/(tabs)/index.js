@@ -42,7 +42,9 @@ export default function HomeScreen() {
       description: 'Battle with \nOnline Opponents\nFirst to get 3 sixes wins!',
       icon: 'casino',
       gradient: ['#FF6B6B', '#FF8E53'],
-      multiplier: '2x'
+      multiplier: '2x',
+      isMultiplayer: true, // Add this flag
+      badge: 'MULTIPLAYER'
     },
     {
       id: 'lucky-number',
@@ -50,7 +52,9 @@ export default function HomeScreen() {
       description: 'Choose your lucky number\nRoll twice to win big!',
       icon: 'stars',
       gradient: ['#4ECDC4', '#44A08D'],
-      multiplier: '2.5x'
+      multiplier: '2.5x',
+      isMultiplayer: false, // Add this flag
+      badge: 'SOLO'
     }
   ];
 
@@ -64,7 +68,7 @@ export default function HomeScreen() {
             throw new Error('No authentication token found');
           }
           
-          const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+          const response = await fetch('http://192.168.1.4:5000/api/users/me', {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -73,11 +77,13 @@ export default function HomeScreen() {
           if (!response.ok) throw new Error('Failed to fetch user data');
           
           const data = await response.json();
-          setBalance(data.wallet);
+          console.log(data);
+          const wallet = data.wallet;
+          setBalance(wallet);
           setEmail(data.email);
           
           // Update wallet in global context
-          updateWallet(data.wallet);
+          updateWallet(wallet);
         } catch (error) {
           console.error('User data fetch error:', error);
           Alert.alert('Error', error.message);
@@ -103,7 +109,13 @@ export default function HomeScreen() {
     setSelectedGame(game);
     setSelectedStake(null);
     
-    // Animate transition from games to stakes
+    // For Six King (multiplayer), go directly to lobby
+    if (game.id === 'six-king') {
+      router.push('/games/six-king-lobby');
+      return;
+    }
+    
+    // For other games, show stake selection
     Animated.timing(slideAnim, {
       toValue: 1,
       duration: 300,
@@ -141,6 +153,7 @@ export default function HomeScreen() {
         useNativeDriver: true,
       })
     ]).start(() => {
+      // Only Lucky Number uses the old single-player flow
       router.push({
         pathname: `/games/${selectedGame.id}`,
         params: { stake: selectedStake }
@@ -209,11 +222,34 @@ export default function HomeScreen() {
                       style={styles.gameCardGradient}
                     >
                       <View style={styles.gameCardContent}>
+                        {/* Game Badge */}
+                        <View style={[
+                          styles.gameBadge,
+                          game.isMultiplayer ? styles.multiplayerBadge : styles.soloBadge
+                        ]}>
+                          <MaterialIcons 
+                            name={game.isMultiplayer ? "people" : "person"} 
+                            size={12} 
+                            color="#fff" 
+                          />
+                          <Text style={styles.badgeText}>{game.badge}</Text>
+                        </View>
+                        
                         <MaterialIcons name={game.icon} size={40} color="#fff" />
                         <Text style={styles.gameTitle}>{game.title}</Text>
                         <Text style={styles.gameDescription}>{game.description}</Text>
-                        <View style={styles.multiplierBadge}>
-                          <Text style={styles.multiplierText}>{game.multiplier}</Text>
+                        
+                        <View style={styles.gameFooter}>
+                          <View style={styles.multiplierBadge}>
+                            <Text style={styles.multiplierText}>{game.multiplier}</Text>
+                          </View>
+                          
+                          {game.isMultiplayer && (
+                            <View style={styles.onlineIndicator}>
+                              <View style={styles.onlineDot} />
+                              <Text style={styles.onlineText}>LIVE</Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </LinearGradient>
@@ -261,6 +297,37 @@ export default function HomeScreen() {
               </View>
             </View>
 
+            {/* Multiplayer Highlight Section */}
+            <View style={styles.multiplayerHighlight}>
+              <LinearGradient
+                colors={['rgba(255, 107, 107, 0.1)', 'rgba(255, 142, 83, 0.05)']}
+                style={styles.highlightContainer}
+              >
+                <View style={styles.highlightHeader}>
+                  <MaterialIcons name="people" size={24} color="#FF6B6B" />
+                  <Text style={styles.highlightTitle}>New: Multiplayer Six King!</Text>
+                </View>
+                <Text style={styles.highlightDescription}>
+                  🎯 Play against real opponents worldwide{'\n'}
+                  👑 First to 3 sixes wins{'\n'}
+                  ⚡ Instant matchmaking{'\n'}
+                  🏆 Win double your stake
+                </Text>
+                <TouchableOpacity 
+                  style={styles.tryNowButton}
+                  onPress={() => router.push('/games/six-king-lobby')}
+                >
+                  <LinearGradient
+                    colors={['#FF6B6B', '#FF8E53']}
+                    style={styles.tryNowGradient}
+                  >
+                    <Text style={styles.tryNowText}>Try Now</Text>
+                    <MaterialIcons name="arrow-forward" size={16} color="#fff" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+
             {/* Stats Section */}
             <View style={styles.statsSection}>
               <LinearGradient
@@ -297,7 +364,7 @@ export default function HomeScreen() {
             </View>
           </>
         ) : (
-          // Stakes Selection Screen
+          // Stakes Selection Screen (Only for Lucky Number now)
           <Animated.View 
             style={[
               styles.stakesScreenContainer,
@@ -322,7 +389,7 @@ export default function HomeScreen() {
               <Text style={styles.selectedGameLabel}>Selected Game</Text>
               <View style={styles.selectedGameCard}>
                 <LinearGradient
-                  colors={selectedGame?.gradient || ['#FF6B6B', '#FF8E53']}
+                  colors={selectedGame?.gradient || ['#4ECDC4', '#44A08D']}
                   style={styles.selectedGameGradient}
                 >
                   <MaterialIcons name={selectedGame?.icon} size={30} color="#fff" />
@@ -401,6 +468,8 @@ export default function HomeScreen() {
   );
 }
 
+// ... (previous code remains the same)
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -450,6 +519,7 @@ const styles = StyleSheet.create({
   gamesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   gameCard: {
     width: (width - 50) / 2,
@@ -460,15 +530,40 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    marginBottom: 20,
   },
   gameCardGradient: {
     padding: 20,
-    minHeight: 180,
+    minHeight: 250,
   },
   gameCardContent: {
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+    position: 'relative',
+  },
+  gameBadge: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  multiplayerBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  soloBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 4,
   },
   gameTitle: {
     fontSize: 18,
@@ -476,13 +571,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 10,
     marginBottom: 8,
+    textAlign: 'center',
   },
   gameDescription: {
     fontSize: 12,
     color: '#fff',
     textAlign: 'center',
     lineHeight: 16,
-    marginBottom: 10,
+    marginBottom: 15,
+  },
+  gameFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 10,
   },
   multiplierBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -495,12 +598,77 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  onlineIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(46, 204, 113, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2ECC71',
+    marginRight: 4,
+  },
+  onlineText: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#2ECC71',
+  },
+  multiplayerHighlight: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  highlightContainer: {
+    padding: 20,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  highlightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  highlightTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 10,
+  },
+  highlightDescription: {
+    fontSize: 14,
+    color: '#fff',
+    lineHeight: 22,
+    marginBottom: 15,
+  },
+  tryNowButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  tryNowGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  tryNowText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginRight: 8,
+  },
   stakesScreenContainer: {
     flex: 1,
+    paddingTop: 60,
   },
   backButton: {
     position: 'absolute',
-    top: 10,
+    top: 60,
     left: 20,
     width: 40,
     height: 40,
@@ -512,7 +680,7 @@ const styles = StyleSheet.create({
   },
   selectedGameSection: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 30,
     alignItems: 'center',
   },
   selectedGameLabel: {
@@ -521,8 +689,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   selectedGameCard: {
-    width: 120,
-    height: 80,
+    width: 150,
+    height: 100,
     borderRadius: 15,
     overflow: 'hidden',
     elevation: 5,
@@ -538,14 +706,14 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   selectedGameTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
     marginTop: 5,
     marginBottom: 2,
   },
   selectedGameMultiplier: {
-    fontSize: 12,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
   },
   stakesContainer: {
@@ -559,10 +727,10 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    minHeight: 60,
+    minHeight: 70,
     justifyContent: 'center',
   },
   stakeCardSelected: {
@@ -573,7 +741,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   stakeAmount: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 5,
@@ -586,7 +754,8 @@ const styles = StyleSheet.create({
   },
   playButtonContainer: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginTop: 20,
+    marginBottom: 30,
   },
   playButton: {
     borderRadius: 15,
@@ -595,31 +764,28 @@ const styles = StyleSheet.create({
   playButtonGradient: {
     paddingVertical: 20,
     alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'center',
+    position: 'relative',
   },
   playButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1a1a2e',
     marginLeft: 10,
-    marginRight: 10,
   },
   playButtonSubtext: {
     fontSize: 12,
     color: '#1a1a2e',
     position: 'absolute',
-    bottom: 5,
+    bottom: 10,
   },
   bottomPadding: {
     height: 20,
   },
-  // Hero Section Styles
   heroSection: {
     paddingHorizontal: 20,
     marginBottom: 30,
     alignItems: 'center',
-    position: 'relative',
   },
   heroContent: {
     alignItems: 'center',
@@ -637,7 +803,6 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
   },
-  // Features Section Styles
   featuresSection: {
     paddingHorizontal: 20,
     marginBottom: 30,
@@ -652,6 +817,7 @@ const styles = StyleSheet.create({
   featuresGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   featureCard: {
     width: (width - 60) / 3,
@@ -662,6 +828,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
+    marginBottom: 15,
   },
   featureGradient: {
     padding: 15,
@@ -682,7 +849,6 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
   },
-  // Stats Section Styles
   statsSection: {
     paddingHorizontal: 20,
     marginBottom: 30,
@@ -718,7 +884,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     marginHorizontal: 15,
   },
-  // CTA Section Styles
   ctaSection: {
     paddingHorizontal: 20,
     marginBottom: 20,
@@ -729,16 +894,11 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.3)',
-    elevation: 3,
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3.84,
   },
   ctaTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFD700',
     marginTop: 10,
     marginBottom: 5,
     textAlign: 'center',
