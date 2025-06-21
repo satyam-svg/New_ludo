@@ -45,7 +45,6 @@ export default function SixKingGame() {
   const [isRolling, setIsRolling] = useState(false);
   const [winner, setWinner] = useState(null);
   const [opponentName, setOpponentName] = useState('Opponent');
-  const [showSixEffect, setShowSixEffect] = useState(false);
   const [rollCount, setRollCount] = useState(0);
   const [isProcessingTurn, setIsProcessingTurn] = useState(false);
   
@@ -87,7 +86,6 @@ export default function SixKingGame() {
   const diceRotation = useRef(new Animated.Value(0)).current;
   const diceScale = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const sixEffectAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
 
@@ -365,13 +363,6 @@ export default function SixKingGame() {
     animateDiceRoll(rolledValue, () => {
       // FIXED: Show six effects IMMEDIATELY after animation completes (before crown update)
       if (rolledValue === 6) {
-        // if (newSixCount >= 3) {
-        //   setTimeout(() => {
-            
-        //   }, 3000);
-        //   setShowSixEffect(true);
-        //   setTimeout(() => setShowSixEffect(false), 1000);
-        // }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       
@@ -407,14 +398,37 @@ export default function SixKingGame() {
 
   function handleGameEnded(data) {
     console.log('🏆 Game ended:', data);
-    setTimeout(() => {
-      console.log("Hello ")
-    }, 10000);
-    setWinner(data.winner);
-    setGameState('finished');
-    
-    const isPlayerWinner = String(data.winner) === String(user.id);
-    handleGameEnd(isPlayerWinner ? 'player' : 'opponent');
+    const rolledValue = 6;
+    animateDiceRoll(rolledValue, () => {
+      // Haptic feedback immediately
+      if (rolledValue === 6) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      
+      // Crown updates after 1 second
+      setTimeout(() => {
+        if (String(data.winner) === String(user.id)) {
+          setPlayerSixes(3);
+        } else {
+          setOpponentSixes(3);
+        }
+        
+        // THEN end game after crown updates complete
+        setTimeout(() => {
+          setWinner(data.winner);
+          setGameState('finished');
+          const isPlayerWinner = String(data.winner) === String(user.id);
+          handleGameEnd(isPlayerWinner ? 'player' : 'opponent');
+          setMatchStatus("Game Ended...");
+        }, 1000); // End game 500ms after crowns update
+        
+      }, 1000);
+      
+      // Clear rolling state
+      setTimeout(() => {
+        setCurrentRollingPlayer(null);
+      }, 2000);
+    });
   }
 
   function handlePlayerLeft(data) {
@@ -536,7 +550,6 @@ export default function SixKingGame() {
   // FIXED: Game end handler now shows modal instead of status messages
   const handleGameEnd = async (winner) => {
     const stakeAmount = parseInt(stake);
-    setTimeout(()=> {},2000);
     if (winner === 'player') {
       const winAmount = stakeAmount * 2;
       await updateWallet(user.wallet + winAmount);
@@ -551,7 +564,7 @@ export default function SixKingGame() {
           stake: stakeAmount
         });
         setShowGameEndModal(true);
-      }, 10000);
+      }, 1000);
     } else {
       await updateWallet(user.wallet - stakeAmount);
       
@@ -565,7 +578,7 @@ export default function SixKingGame() {
           stake: stakeAmount
         });
         setShowGameEndModal(true);
-      }, 10000);
+      }, 1000);
     }
   };
 
@@ -573,7 +586,7 @@ export default function SixKingGame() {
   const handleTryAgain = () => {
     setShowGameEndModal(false);
     // Navigate to stake selection page
-    router.replace('/six-king-lobby.js');
+    router.replace('games/six-king-lobby');
   };
 
   const handleExit = () => {
@@ -584,12 +597,34 @@ export default function SixKingGame() {
 
   // Back press handler
   const handleBackPress = () => {
-    setMatchStatus('Leaving game...');
-    if (socket && roomCode && user.id) {
-      sendMessage('leave_game', { gameId: roomCode, playerId: user.id });
-    }
-    setTimeout(() => router.back(), 1000);
-    return true;
+    Alert.alert(
+      "Leave Game?",
+      `Are you sure you want to leave? You will lose your stake of ₹${stake}.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => {
+            // Do nothing - stay in game
+          }
+        },
+        {
+          text: "OK",
+          style: "destructive",
+          onPress: () => {
+            // User confirmed - proceed with leaving
+            setMatchStatus('Leaving game...');
+            if (socket && roomCode && user.id) {
+              sendMessage('leave_game', { gameId: roomCode, playerId: user.id });
+            }
+            setTimeout(() => router.back(), 1000);
+          }
+        }
+      ],
+      { cancelable: false } // Prevents dismissing by tapping outside
+    );
+    
+    return true; // Prevent default back behavior
   };
 
   // Helper functions
@@ -702,24 +737,6 @@ export default function SixKingGame() {
     };
   }, [socket, roomCode, user.id]);
 
-  // Game end detection
-  // useEffect(() => {
-  //   const currentPlayerId = user.id || (user?.id || `player_${Date.now()}`);
-  //   if (playerSixes >= 3) {
-  //     setShowSixEffect(true);
-      
-  //     setTimeout(() => {
-  //       setShowSixEffect(false);
-  //       // Game will end automatically via useEffect when six count updates
-  //     }, 1000);
-  //     setWinner(currentPlayerId);
-  //     setGameState('finished');
-  //   } else if (opponentSixes >= 3) {
-  //     setWinner(opponentId);
-  //     setGameState('finished');
-  //   }
-  // }, [playerSixes, opponentSixes, user.id, opponentId, user]);
-
   // FIXED: Improved useEffect to prevent useInsertionEffect errors
   useEffect(() => {
     let pulseAnimation;
@@ -748,23 +765,6 @@ export default function SixKingGame() {
       }
     };
   }, [currentTurn, gameState, waitingForOpponent, currentRollingPlayer, pulseAnim]);
-
-  useEffect(() => {
-    if (showSixEffect) {
-      Animated.sequence([
-        Animated.timing(sixEffectAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(sixEffectAnim, {
-          toValue: 0,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [showSixEffect, sixEffectAnim]);
 
   // FIXED: Six highlighting only when not rolling and dice value is 6
   useEffect(() => {
@@ -924,30 +924,6 @@ export default function SixKingGame() {
       ) : null}
 
       {/* Six effect overlay */}
-      {showSixEffect && (
-        <Animated.View 
-          style={[
-            styles.sixEffectOverlay,
-            {
-              opacity: sixEffectAnim,
-              transform: [{
-                scale: sixEffectAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.5, 1.5],
-                })
-              }]
-            }
-          ]}
-        >
-          <Text style={styles.sixEffectText}>
-            {winner === user.id ? '🎉 YOU WON! 🎉' : '😔 OPPONENT WINS! 😔'}
-          </Text>
-          <LinearGradient
-            colors={['rgba(255, 215, 0, 0.3)', 'transparent']}
-            style={styles.sixEffectGlow}
-          />
-        </Animated.View>
-      )}
 
       {/* Header */}
       <View style={styles.header}>
