@@ -355,33 +355,43 @@ export default function SixKingGame() {
     
     setRollCount(prev => prev + 1);
     
-    // FIX 1: Set who is currently rolling based on the playerId who rolled
+    // FIXED: Set who is currently rolling based on the playerId who rolled
     setCurrentRollingPlayer(playerId);
+    
+    // FIXED: Store the new six count but don't update state immediately
+    // This prevents crown badges from updating before animation completes
     
     // Animate dice roll
     animateDiceRoll(rolledValue, () => {
-      // FIX 3: Update six counts correctly based on who rolled
-      if (String(playerId) === String(user.id)) {
-        // I rolled the dice, update my sixes
-        setPlayerSixes(newSixCount);
-        console.log(`👑 My sixes: ${newSixCount}`);
-      } else {
-        // Opponent rolled the dice, update opponent's sixes
-        setOpponentSixes(newSixCount);
-        console.log(`🤖 Opponent sixes: ${newSixCount}`);
-      }
-      
-      // Show effects for six ONLY after rolling is complete
+      // FIXED: Show six effects IMMEDIATELY after animation completes (before crown update)
       if (rolledValue === 6) {
-        if (newSixCount >= 3) {
-          setShowSixEffect(true);
-          setTimeout(() => setShowSixEffect(false), 1000);
-        }
+        // if (newSixCount >= 3) {
+        //   setTimeout(() => {
+            
+        //   }, 3000);
+        //   setShowSixEffect(true);
+        //   setTimeout(() => setShowSixEffect(false), 1000);
+        // }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       
-      // Clear rolling state after animation
-      setCurrentRollingPlayer(null);
+      // FIXED: Update six counts AFTER a delay (so six effects show first)
+      setTimeout(() => {
+        if (String(playerId) === String(user.id)) {
+          // I rolled the dice, update my sixes AFTER delay
+          setPlayerSixes(newSixCount);
+          console.log(`👑 My sixes updated after delay: ${newSixCount}`);
+        } else {
+          // Opponent rolled the dice, update opponent's sixes AFTER delay
+          setOpponentSixes(newSixCount);
+          console.log(`🤖 Opponent sixes updated after delay: ${newSixCount}`);
+        }
+      }, 2000); // Crown badges update 300ms after six effects
+      
+      // FIXED: Clear rolling state after a longer delay so both players can see the rolling state
+      setTimeout(() => {
+        setCurrentRollingPlayer(null);
+      }, 3000); // Increased delay to 500ms so opponent can see rolling state
     });
   }
 
@@ -397,6 +407,9 @@ export default function SixKingGame() {
 
   function handleGameEnded(data) {
     console.log('🏆 Game ended:', data);
+    setTimeout(() => {
+      console.log("Hello ")
+    }, 10000);
     setWinner(data.winner);
     setGameState('finished');
     
@@ -507,10 +520,16 @@ export default function SixKingGame() {
       }
     }, 120);
 
+    // FIXED: Ensure the callback runs only after ALL animations complete
     Animated.parallel([rotationAnimation, scaleAnimation]).start(() => {
       setIsRolling(false);
       diceRotation.setValue(0);
-      onComplete();
+      
+      // FIXED: Add a small delay before calling onComplete to ensure dice value is set
+      setTimeout(() => {
+        console.log('🎲 Animation completed, now updating crown badges');
+        onComplete();
+      }, 200); // Small delay to ensure final dice value is visible before crowns update
     });
   }
 
@@ -532,7 +551,7 @@ export default function SixKingGame() {
           stake: stakeAmount
         });
         setShowGameEndModal(true);
-      }, 1000);
+      }, 10000);
     } else {
       await updateWallet(user.wallet - stakeAmount);
       
@@ -546,7 +565,7 @@ export default function SixKingGame() {
           stake: stakeAmount
         });
         setShowGameEndModal(true);
-      }, 1000);
+      }, 10000);
     }
   };
 
@@ -625,7 +644,7 @@ export default function SixKingGame() {
     return String(currentTurn) === String(currentPlayerId);
   };
 
-  // FIX 2: Fixed the turn indicator logic to show correct rolling states
+  // FIXED: Fixed the turn indicator logic to show correct rolling states
   const getTurnIndicatorText = () => {
     if (waitingForOpponent) {
       return 'Waiting for opponent...';
@@ -652,7 +671,7 @@ export default function SixKingGame() {
       return 'WAITING FOR OPPONENT...';
     }
     
-    // FIX 1: Show correct rolling state based on who is rolling
+    // FIXED: Show correct rolling state based on who is rolling
     if (currentRollingPlayer) {
       if (String(currentRollingPlayer) === String(user.id)) {
         return 'ROLLING...';
@@ -684,22 +703,22 @@ export default function SixKingGame() {
   }, [socket, roomCode, user.id]);
 
   // Game end detection
-  useEffect(() => {
-    const currentPlayerId = user.id || (user?.id || `player_${Date.now()}`);
-    if (playerSixes >= 3) {
-      setShowSixEffect(true);
+  // useEffect(() => {
+  //   const currentPlayerId = user.id || (user?.id || `player_${Date.now()}`);
+  //   if (playerSixes >= 3) {
+  //     setShowSixEffect(true);
       
-      setTimeout(() => {
-        setShowSixEffect(false);
-        // Game will end automatically via useEffect when six count updates
-      }, 1000);
-      setWinner(currentPlayerId);
-      setGameState('finished');
-    } else if (opponentSixes >= 3) {
-      setWinner(opponentId);
-      setGameState('finished');
-    }
-  }, [playerSixes, opponentSixes, user.id, opponentId, user]);
+  //     setTimeout(() => {
+  //       setShowSixEffect(false);
+  //       // Game will end automatically via useEffect when six count updates
+  //     }, 1000);
+  //     setWinner(currentPlayerId);
+  //     setGameState('finished');
+  //   } else if (opponentSixes >= 3) {
+  //     setWinner(opponentId);
+  //     setGameState('finished');
+  //   }
+  // }, [playerSixes, opponentSixes, user.id, opponentId, user]);
 
   // FIXED: Improved useEffect to prevent useInsertionEffect errors
   useEffect(() => {
@@ -960,7 +979,7 @@ export default function SixKingGame() {
           style={[
             styles.playerCard,
             styles.opponentCard,
-            // FIX 2: Show opponent highlighting only when opponent is playing/rolling
+            // FIXED: Show opponent highlighting only when opponent is playing/rolling
             ((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
              (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && { 
               transform: [{ scale: pulseAnim }],
@@ -1005,7 +1024,7 @@ export default function SixKingGame() {
           style={[
             styles.playerCard,
             styles.playerCardSelf,
-            // FIX 2: Show player highlighting only when player is playing/rolling
+            // FIXED: Show player highlighting only when player is playing/rolling
             ((isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
              (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && { 
               transform: [{ scale: pulseAnim }],
@@ -1223,7 +1242,6 @@ export default function SixKingGame() {
     </LinearGradient>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
