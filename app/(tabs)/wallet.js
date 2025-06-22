@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   TextInput,
   Alert,
   Animated,
-  Dimensions
+  Dimensions,
+  ActivityIndicator
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -24,11 +26,13 @@ export default function WalletScreen() {
   const [activeTab, setActiveTab] = useState('add'); // add, withdraw
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [loadingBalance, setLoadingBalance] = useState(true);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     Animated.timing(slideAnim, {
       toValue: 1,
       duration: 500,
@@ -42,33 +46,67 @@ export default function WalletScreen() {
     setAmount('');
   };
 
+  const fetchWalletBalance = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        setLoadingBalance(false);
+        return;
+      }
+      
+      const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch balance');
+      
+      const userData = await response.json();
+      setBalance(userData.wallet);
+      updateWallet(userData.wallet || 0); // Update context
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch wallet balance');
+      console.error(error);
+      // Set a default balance if fetch fails
+      setBalance(0);
+    } finally {
+      setLoadingBalance(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWalletBalance();
+  }, []);
+
   const handleQuickAmount = (quickAmount) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setAmount(quickAmount.toString());
   };
 
   const handleTransaction = async () => {
-    const transactionAmount = parseInt(amount);
-    
-    if (!transactionAmount || transactionAmount <= 0) {
+    if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount');
       return;
     }
 
-    if (activeTab === 'withdraw' && transactionAmount > user.wallet) {
-      Alert.alert('Insufficient Balance', 'You don\'t have enough balance to withdraw this amount');
-      return;
+    const transactionAmount = parseFloat(amount);
+
+    // Validation for withdraw
+    if (activeTab === 'withdraw') {
+      if (transactionAmount < 100) {
+        Alert.alert('Minimum Withdrawal', 'Minimum withdrawal amount is ₹100');
+        return;
+      }
+      if (transactionAmount > balance) {
+        Alert.alert('Insufficient Balance', 'You don\'t have enough balance');
+        return;
+      }
     }
 
-    if (activeTab === 'withdraw' && transactionAmount < 100) {
-      Alert.alert('Minimum Withdrawal', 'Minimum withdrawal amount is ₹100');
-      return;
-    }
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setLoading(true);
 
-    // Animate button
+    // Animation for button press
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.95,
@@ -79,35 +117,47 @@ export default function WalletScreen() {
         toValue: 1,
         duration: 100,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
 
-    // Mock transaction processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Send transaction to backend
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await fetch('http://192.168.1.2:5000/api/wallet/transaction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          type: activeTab,
+          amount: transactionAmount
+        })
+      });
 
-    const newBalance = activeTab === 'add' 
-      ? user.wallet + transactionAmount
-      : user.wallet - transactionAmount;
-
-    await updateWallet(newBalance);
-
-    // Save transaction history (in a real app, this would be saved to a database)
-    const transaction = {
-      id: Date.now().toString(),
-      type: activeTab,
-      amount: activeTab === 'add' ? transactionAmount : -transactionAmount,
-      date: new Date().toISOString(),
-      status: 'completed'
-    };
-
-    setLoading(false);
-    setAmount('');
-
-    Alert.alert(
-      'Transaction Successful',
-      `₹${transactionAmount} ${activeTab === 'add' ? 'added to' : 'withdrawn from'} your wallet.\nNew balance: ₹${newBalance}`,
-      [{ text: 'OK' }]
-    );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Transaction failed');
+      }
+      
+      // Refresh balance after transaction
+      await fetchWalletBalance();
+      
+      // Success handling
+      Alert.alert(
+        'Success',
+        `₹${transactionAmount} ${activeTab === 'add' ? 'added to' : 'withdrawn from'} your wallet successfully!`
+      );
+      
+      setAmount('');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Transaction failed');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -135,9 +185,13 @@ export default function WalletScreen() {
               <MaterialIcons name="account-balance-wallet" size={30} color="#1a1a2e" />
               <View style={styles.balanceInfo}>
                 <Text style={styles.balanceLabel}>Current Balance</Text>
-                <Text style={styles.balanceAmount}>
-                  {formatCurrency(user?.wallet || 0)}
-                </Text>
+                {loadingBalance ? (
+                  <ActivityIndicator color="#1a1a2e" />
+                ) : (
+                  <Text style={styles.balanceAmount}>
+                    {formatCurrency(balance)}
+                  </Text>
+                )}
               </View>
             </LinearGradient>
           </View>
@@ -263,11 +317,15 @@ export default function WalletScreen() {
                 }
                 style={styles.transactionButtonGradient}
               >
-                <MaterialIcons 
-                  name={activeTab === 'add' ? 'add-circle' : 'remove-circle'} 
-                  size={24} 
-                  color="#fff" 
-                />
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <MaterialIcons 
+                    name={activeTab === 'add' ? 'add-circle' : 'remove-circle'} 
+                    size={24} 
+                    color="#fff" 
+                  />
+                )}
                 <Text style={styles.transactionButtonText}>
                   {loading 
                     ? 'Processing...' 

@@ -51,6 +51,15 @@ export default function HomeScreen() {
       icon: 'stars',
       gradient: ['#4ECDC4', '#44A08D'],
       multiplier: '2.5x'
+    },
+    // Add Matka King game option
+    {
+      id: 'matka-king',
+      title: 'Matka King',
+      description: 'Play in time slots\nWin 9.5x your stake!',
+      icon: 'schedule',
+      gradient: ['#8B5CF6', '#7C3AED'],
+      multiplier: '9.5x'
     }
   ];
 
@@ -141,10 +150,19 @@ export default function HomeScreen() {
         useNativeDriver: true,
       })
     ]).start(() => {
-      router.push({
-        pathname: `/games/${selectedGame.id}`,
-        params: { stake: selectedStake }
-      });
+      // Navigate to Matka King screen if selected
+      if (selectedGame.id === 'matka-king') {
+        router.push({
+          pathname: '/games/matka-king',
+          params: { stake: selectedStake }
+        });
+      } else {
+        // For other games
+        router.push({
+          pathname: `/games/${selectedGame.id}`,
+          params: { stake: selectedStake }
+        });
+      }
     });
   };
 
@@ -255,7 +273,7 @@ export default function HomeScreen() {
                   >
                     <MaterialIcons name="trending-up" size={30} color="#FFD700" />
                     <Text style={styles.featureTitle}>High Rewards</Text>
-                    <Text style={styles.featureDescription}>Win up to 2.5x</Text>
+                    <Text style={styles.featureDescription}>Win up to 9.5x</Text>
                   </LinearGradient>
                 </View>
               </View>
@@ -450,6 +468,7 @@ const styles = StyleSheet.create({
   gamesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap', // Added to wrap games on smaller screens
   },
   gameCard: {
     width: (width - 50) / 2,
@@ -460,6 +479,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    marginBottom: 20, // Added spacing between cards
   },
   gameCardGradient: {
     padding: 20,
