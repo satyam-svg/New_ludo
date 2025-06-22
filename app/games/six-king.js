@@ -434,8 +434,8 @@ export default function SixKingGame() {
   function handlePlayerLeft(data) {
     setMatchStatus('Opponent left the game');
     setTimeout(() => {
-      router.back();
-    }, 2000);
+      router.replace('/');
+    }, 500);
   }
 
   function handleError(data) {
@@ -443,7 +443,7 @@ export default function SixKingGame() {
     setMatchStatus(`Error: ${data.message}`);
     if (data.code === 'GAME_NOT_FOUND' || data.code === 'GAME_FULL') {
       setTimeout(() => {
-        router.back();
+        router.replace('/');
       }, 2000);
     }
   }
@@ -551,22 +551,18 @@ export default function SixKingGame() {
   const handleGameEnd = async (winner) => {
     const stakeAmount = parseInt(stake);
     if (winner === 'player') {
-      const winAmount = stakeAmount * 2;
-      await updateWallet(user.wallet + winAmount);
-      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       // Show game end modal after 2 seconds
       setTimeout(() => {
         setGameEndResult({
           isWinner: true,
-          amount: winAmount,
+          amount: stakeAmount*2,
           stake: stakeAmount
         });
         setShowGameEndModal(true);
       }, 1000);
     } else {
-      await updateWallet(user.wallet - stakeAmount);
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
@@ -615,9 +611,9 @@ export default function SixKingGame() {
             // User confirmed - proceed with leaving
             setMatchStatus('Leaving game...');
             if (socket && roomCode && user.id) {
-              sendMessage('leave_game', { gameId: roomCode, playerId: user.id });
+              sendMessage('leave_game', { gameId: roomCode, playerId: user.id , opponentId: opponentId, stake: stake});
             }
-            setTimeout(() => router.back(), 1000);
+            setTimeout(() => router.replace('/'), 100);
           }
         }
       ],

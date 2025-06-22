@@ -101,6 +101,7 @@ export default function SixKingLobby() {
     console.log('🎮 Game started from lobby, navigating immediately...', data);
     setLobbyState('matched');
     
+    
     // disconnect();
     // Navigate immediately with complete game data - NO POPUP!
     router.push({
@@ -189,7 +190,6 @@ export default function SixKingLobby() {
 
     setIsLoading(true);
     setLobbyState('creating');
-
     sendMessage('create_game', {
       playerId: user.id,
       playerName: user.name || `Player${user.id}`,
