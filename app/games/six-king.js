@@ -946,88 +946,88 @@ export default function SixKingGame() {
 
       {/* Players Section */}
       <View style={styles.playersContainer}>
-        {/* Opponent */}
-        <Animated.View 
-          style={[
-            styles.playerCard,
-            styles.opponentCard,
-            // FIXED: Show opponent highlighting only when opponent is playing/rolling
-            ((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
-             (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && { 
-              transform: [{ scale: pulseAnim }],
-              shadowOpacity: 0.6,
-            }
-          ]}
-        >
-          <LinearGradient
-            colors={['rgba(255, 107, 107, 0.3)', 'rgba(255, 107, 107, 0.1)']}
-            style={styles.playerCardGradient}
-          >
-            <View style={styles.playerAvatar}>
-              <Text style={styles.avatarEmoji}>🤖</Text>
-            </View>
-            <Text style={styles.playerName}>{opponentName}</Text>
-            {renderSixesProgress(opponentSixes, false)}
-            {/* Show turn indicator for opponent when it's their turn or they're rolling */}
-            {((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
-              (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && (
-              <View style={styles.turnIndicator}>
-                <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
-                <Text style={styles.turnIndicatorText}>
-                  {currentRollingPlayer && String(currentRollingPlayer) !== String(user.id) 
-                    ? 'Rolling...' 
-                    : 'Playing...'}
-                </Text>
-              </View>
-            )}
-          </LinearGradient>
-        </Animated.View>
-
-        {/* VS Badge */}
-        <LinearGradient
-          colors={['#8B5CF6', '#EC4899']}
-          style={styles.vsContainer}
-        >
-          <Text style={styles.vsText}>VS</Text>
-        </LinearGradient>
-
-        {/* Player */}
-        <Animated.View 
-          style={[
-            styles.playerCard,
-            styles.playerCardSelf,
-            // FIXED: Show player highlighting only when player is playing/rolling
-            ((isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
-             (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && { 
-              transform: [{ scale: pulseAnim }],
-              shadowOpacity: 0.6,
-            }
-          ]}
-        >
-          <LinearGradient
-            colors={['rgba(78, 205, 196, 0.3)', 'rgba(78, 205, 196, 0.1)']}
-            style={styles.playerCardGradient}
-          >
-            <View style={styles.playerAvatar}>
-              <Text style={styles.avatarEmoji}>👤</Text>
-            </View>
-            <Text style={styles.playerName}>You</Text>
-            {renderSixesProgress(playerSixes, true)}
-            {/* Show turn indicator for player when it's their turn or they're rolling */}
-            {((isMyTurn() && !waitingForOpponent && !currentRollingPlayer) ||
-              (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && (
-              <View style={styles.turnIndicator}>
-                <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
-                <Text style={styles.turnIndicatorText}>
-                  {currentRollingPlayer && String(currentRollingPlayer) === String(user.id) 
-                    ? 'Rolling...' 
-                    : 'Your Turn!'}
-                </Text>
-              </View>
-            )}
-          </LinearGradient>
-        </Animated.View>
+  {/* Player - Always on LEFT */}
+  <Animated.View 
+    style={[
+      styles.playerCard,
+      styles.playerCardSelf,
+      // Show player highlighting only when player is playing/rolling
+      ((isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
+       (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && { 
+        transform: [{ scale: pulseAnim }],
+        shadowOpacity: 0.6,
+      }
+    ]}
+  >
+    <LinearGradient
+      colors={['rgba(78, 205, 196, 0.3)', 'rgba(78, 205, 196, 0.1)']}
+      style={styles.playerCardGradient}
+    >
+      <View style={styles.playerAvatar}>
+        <Text style={styles.avatarEmoji}>👤</Text>
       </View>
+      <Text style={styles.playerName}>You</Text>
+      {renderSixesProgress(playerSixes, true)}
+      {/* Show turn indicator for player when it's their turn or they're rolling */}
+      {((isMyTurn() && !waitingForOpponent && !currentRollingPlayer) ||
+        (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && (
+        <View style={styles.turnIndicator}>
+          <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
+          <Text style={styles.turnIndicatorText}>
+            {currentRollingPlayer && String(currentRollingPlayer) === String(user.id) 
+              ? 'Rolling...' 
+              : 'Your Turn!'}
+          </Text>
+        </View>
+      )}
+    </LinearGradient>
+  </Animated.View>
+
+  {/* VS Badge */}
+  <LinearGradient
+    colors={['#8B5CF6', '#EC4899']}
+    style={styles.vsContainer}
+  >
+    <Text style={styles.vsText}>VS</Text>
+  </LinearGradient>
+
+  {/* Opponent - Always on RIGHT */}
+  <Animated.View 
+    style={[
+      styles.playerCard,
+      styles.opponentCard,
+      // Show opponent highlighting only when opponent is playing/rolling
+      ((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
+       (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && { 
+        transform: [{ scale: pulseAnim }],
+        shadowOpacity: 0.6,
+      }
+    ]}
+  >
+    <LinearGradient
+      colors={['rgba(255, 107, 107, 0.3)', 'rgba(255, 107, 107, 0.1)']}
+      style={styles.playerCardGradient}
+    >
+      <View style={styles.playerAvatar}>
+        <Text style={styles.avatarEmoji}>🤖</Text>
+      </View>
+      <Text style={styles.playerName}>{opponentName}</Text>
+      {renderSixesProgress(opponentSixes, false)}
+      {/* Show turn indicator for opponent when it's their turn or they're rolling */}
+      {((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
+        (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && (
+        <View style={styles.turnIndicator}>
+          <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
+          <Text style={styles.turnIndicatorText}>
+            {currentRollingPlayer && String(currentRollingPlayer) !== String(user.id) 
+              ? 'Rolling...' 
+              : 'Playing...'}
+          </Text>
+        </View>
+      )}
+    </LinearGradient>
+  </Animated.View>
+    </View>
 
       {/* Dice Section - Show when game is playing */}
       {(gameState === 'playing' && !waitingForOpponent) && (
