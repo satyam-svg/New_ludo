@@ -38,15 +38,20 @@ export function AuthProvider({ children }) {
 
   const fetchUserData = async (authToken) => {
     try {
-      const response = await fetch('http://192.168.200.235:5000/api/users/me', {
+      // console.log(authToken);
+      const response = await fetch('http://192.168.1.4:5000/api/users/me', {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
       });
       
+      // console.log(response.json())
       if (!response.ok) throw new Error('Failed to fetch user data');
       
-      return await response.json();
+      const userData = await response.json();
+      console.log(userData);
+      return userData;
+      
     } catch (error) {
       console.error('User data fetch error:', error);
       return null;

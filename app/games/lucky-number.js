@@ -754,7 +754,11 @@ import { useAuth } from '../../hooks/useAuth';
 const { width, height } = Dimensions.get('window');
 
 // API Configuration
+<<<<<<< HEAD
 const API_BASE_URL = 'http://192.168.1.2:5000/api'; // Replace with your backend URL
+=======
+const API_BASE_URL = 'http://192.168.1.4:5000/api'; // Replace with your backend URL
+>>>>>>> 8bd13def6a6c2e259f9edd03bca4828ee9417d4d
 
 export default function LuckyNumberGame() {
   const { stake } = useLocalSearchParams();
