@@ -52,22 +52,9 @@ export default function HomeScreen() {
       description: 'Choose your lucky number\nRoll twice to win big!',
       icon: 'stars',
       gradient: ['#4ECDC4', '#44A08D'],
-<<<<<<< HEAD
-      multiplier: '2.5x'
-    },
-    // Add Matka King game option
-    {
-      id: 'matka-king',
-      title: 'Matka King',
-      description: 'Play in time slots\nWin 9.5x your stake!',
-      icon: 'schedule',
-      gradient: ['#8B5CF6', '#7C3AED'],
-      multiplier: '9.5x'
-=======
       multiplier: '2.5x',
       isMultiplayer: false, // Add this flag
       badge: 'SOLO'
->>>>>>> 8bd13def6a6c2e259f9edd03bca4828ee9417d4d
     }
   ];
 
@@ -81,7 +68,7 @@ export default function HomeScreen() {
             throw new Error('No authentication token found');
           }
           
-          const response = await fetch('http://192.168.1.4:5000/api/users/me', {
+          const response = await fetch('http://192.168.1.2:5000/api/users/me', {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -166,27 +153,11 @@ export default function HomeScreen() {
         useNativeDriver: true,
       })
     ]).start(() => {
-<<<<<<< HEAD
-      // Navigate to Matka King screen if selected
-      if (selectedGame.id === 'matka-king') {
-        router.push({
-          pathname: '/games/matka-king',
-          params: { stake: selectedStake }
-        });
-      } else {
-        // For other games
-        router.push({
-          pathname: `/games/${selectedGame.id}`,
-          params: { stake: selectedStake }
-        });
-      }
-=======
       // Only Lucky Number uses the old single-player flow
       router.push({
         pathname: `/games/${selectedGame.id}`,
         params: { stake: selectedStake }
       });
->>>>>>> 8bd13def6a6c2e259f9edd03bca4828ee9417d4d
     });
   };
 
@@ -548,11 +519,7 @@ const styles = StyleSheet.create({
   gamesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-<<<<<<< HEAD
-    flexWrap: 'wrap', // Added to wrap games on smaller screens
-=======
     flexWrap: 'wrap',
->>>>>>> 8bd13def6a6c2e259f9edd03bca4828ee9417d4d
   },
   gameCard: {
     width: (width - 50) / 2,
@@ -563,11 +530,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-<<<<<<< HEAD
-    marginBottom: 20, // Added spacing between cards
-=======
     marginBottom: 20,
->>>>>>> 8bd13def6a6c2e259f9edd03bca4828ee9417d4d
   },
   gameCardGradient: {
     padding: 20,
