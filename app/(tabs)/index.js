@@ -52,9 +52,24 @@ export default function HomeScreen() {
       description: 'Choose your lucky number\nRoll twice to win big!',
       icon: 'stars',
       gradient: ['#4ECDC4', '#44A08D'],
-      multiplier: '2.5x',
-      isMultiplayer: false, // Add this flag
-      badge: 'SOLO'
+      multiplier: '2.5x'
+    },
+    // Add Matka King game option
+    {
+      id: 'matka-king',
+      title: 'Matka King',
+      description: 'Play in time slots\nWin 9.5x your stake!',
+      icon: 'schedule',
+      gradient: ['#8B5CF6', '#7C3AED'],
+      multiplier: '9.5x'
+    },
+    {
+      id: 'snake-king',
+      title: 'Snake King',
+      description: 'Beat snakes \nWin upto 15x your stake!',
+      icon: 'bug-report',
+      gradient: ['#4E9525', '#2B5E20'],
+      multiplier: '2x - 15x'
     }
   ];
 
@@ -68,7 +83,7 @@ export default function HomeScreen() {
             throw new Error('No authentication token found');
           }
           
-          const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+          const response = await fetch('http://192.168.1.7:5000/api/users/me', {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -153,11 +168,26 @@ export default function HomeScreen() {
         useNativeDriver: true,
       })
     ]).start(() => {
-      // Only Lucky Number uses the old single-player flow
-      router.push({
-        pathname: `/games/${selectedGame.id}`,
-        params: { stake: selectedStake }
-      });
+      // Navigate to Matka King screen if selected
+      if (selectedGame.id === 'matka-king') {
+        router.push({
+          pathname: '/games/matka-king',
+          params: { stake: selectedStake }
+        });
+      }
+      else if (selectedGame.id == 'snake-king'){
+        router.push({
+          pathname: '/games/snake-king-lobby',
+          params: { stake: selectedStake }
+        });
+      }
+       else {
+        // For other games
+        router.push({
+          pathname: `/games/${selectedGame.id}`,
+          params: { stake: selectedStake }
+        });
+      }
     });
   };
 
@@ -519,7 +549,7 @@ const styles = StyleSheet.create({
   gamesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
+    flexWrap: 'wrap', // Added to wrap games on smaller screens
   },
   gameCard: {
     width: (width - 50) / 2,
@@ -530,7 +560,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    marginBottom: 20,
+    marginBottom: 20, // Added spacing between cards
   },
   gameCardGradient: {
     padding: 20,
