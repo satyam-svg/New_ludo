@@ -136,10 +136,6 @@ export default function SixKingGame() {
     
     // Check if we came from lobby with game already started
     if (gameStarted === 'true' && firstPlayer && players) {
-      console.log('🎮 Game already started from lobby navigation!');
-      console.log('🔍 First player from nav:', firstPlayer);
-      console.log('🔍 Players from nav:', players);
-      console.log('🔍 My ID:', playerId);
       
       try {
         const gamePlayersData = JSON.parse(players);
@@ -159,9 +155,6 @@ export default function SixKingGame() {
           console.log(`👤 Opponent from nav: ${opponent.name} (${opponent.id})`);
         }
         
-        console.log(`🎯 First turn from nav: ${firstPlayer}`);
-        console.log(`🎯 My turn from nav: ${String(firstPlayer) === String(playerId)}`);
-        
         setMatchStatus('Game Started!');
         setTimeout(() => setMatchStatus(''), 1000);
         
@@ -173,39 +166,17 @@ export default function SixKingGame() {
       }
     } else {
       // Normal flow - no game data from navigation
-      console.log('🔍 No game data from navigation, using normal flow');
       setGameState('waiting');
       setWaitingForOpponent(true);
     }
   }, [user, gameStarted, firstPlayer, players, gameId]);
 
-  // WebSocket connection handler
-  function handleSocketConnect() {
-    console.log('🔌 WebSocket connected');
-    if (roomCode && user.id) {
-      console.log(`🎮 Joining game ${roomCode} as player ${user.id}`);
-      sendMessage('join_game', {
-        gameId: roomCode,
-        playerId: user.id,
-        playerName: user?.name || 'Player',
-        stake: parseInt(stake)
-      });
-    }
-  }
-
-  function handleSocketDisconnect() {
-    console.log('🔌 WebSocket disconnected');
-    // Don't show alert immediately, might be temporary
-  }
-
   // WebSocket message handler
   function handleWebSocketMessage(message) {
-    console.log('📨 Game screen received WebSocket message:', message);
     const { type, data } = message;
 
     // Ensure we have a player ID before processing messages
     const currentPlayerId = user.id || initializePlayerId();
-    console.log('📨 Current Player ID for message processing:', currentPlayerId);
 
     switch (type) {
       case 'connected':
@@ -213,15 +184,6 @@ export default function SixKingGame() {
         break;
       case 'connection_updated':
         console.log('✅ Backend WebSocket connection updated for game');
-        break;
-      case 'queued':
-        handleQueued(data);
-        break;
-      case 'game_matched':
-        handleGameMatched(data);
-        break;
-      case 'game_started':
-        handleGameStarted(data, currentPlayerId);
         break;
       case 'dice_rolled':
         handleDiceRolled(data, currentPlayerId);
@@ -241,114 +203,7 @@ export default function SixKingGame() {
     }
   }
 
-  // Event handlers
-  function handleQueued(data) {
-    console.log('⏳ Added to queue:', data);
-    setMatchStatus('Looking for opponent...');
-  }
-
-  function handleGameMatched(data) {
-    console.log('🎯 Match found! Auto-joining game:', data);
-    
-    // Show match found status (no popup!)
-    setMatchStatus(`Match found! vs ${data.opponent.name}`);
-    
-    // Update room code and opponent info
-    setRoomCode(data.gameId);
-    setOpponentName(data.opponent.name);
-    setOpponentId(data.opponent.id);
-    
-    // DON'T automatically join - the backend handles this
-    // The game is already created with both players
-    console.log(`✅ Match created with game ID: ${data.gameId}`);
-    
-    // Clear match status after 2 seconds
-    setTimeout(() => {
-      setMatchStatus('');
-    }, 2000);
-  }
-
-  function handleGameJoined(data) {
-    console.log('✅ Successfully joined game:', data);
-    console.log('🔍 Game joined data:', data);
-    
-    setGameReady(data.gameReady || false);
-    
-    if (data.gameReady) {
-      console.log('🎮 Game is ready, setting waitingForOpponent to false');
-      setWaitingForOpponent(false);
-      setMatchStatus('Game starting...');
-      
-      // Clear status after game starts
-      setTimeout(() => {
-        setMatchStatus('');
-      }, 2000);
-    }
-  }
-
-  function handleReadyToStart(data) {
-    console.log('🚀 Game ready to start:', data);
-    setGameReady(true);
-    setWaitingForOpponent(false);
-    setMatchStatus('Both players ready! Starting game...');
-    
-    // Clear status when game starts
-    setTimeout(() => {
-      setMatchStatus('');
-    }, 2000);
-    
-    // Auto-start the game
-    setTimeout(() => {
-      if (gameState === 'waiting') {
-        console.log('🎯 Auto-starting game...');
-        sendMessage('start_game', {
-          gameId: roomCode,
-          playerId: user.id
-        });
-      }
-    }, 1000);
-  }
-
-  function handleGameStarted(data) {
-    console.log('🎮 Game started with data:', data);
-    console.log('🔍 Players:', data.players);
-    console.log('🔍 First player ID:', data.firstPlayer);
-    console.log('🔍 My player ID:', user.id);
-    
-    // IMPORTANT: Set game state to playing immediately
-    setGameState('playing');
-    setCurrentTurn(data.firstPlayer);
-    setWaitingForOpponent(false);
-    setGameReady(true);
-    setMatchStatus('Game Started!'); // Show for 1 second
-    
-    // Clear status quickly
-    setTimeout(() => {
-      setMatchStatus('');
-    }, 1000);
-    
-    // Set player information
-    if (data.players && data.players.length === 2) {
-      const opponent = data.players.find(p => {
-        console.log(`🔍 Checking player: ${p.id} vs my ID: ${user.id}`);
-        return String(p.id) !== String(user.id);
-      });
-      
-      if (opponent) {
-        setOpponentName(opponent.name);
-        setOpponentId(opponent.id);
-        console.log(`👤 Opponent set: ${opponent.name} (ID: ${opponent.id})`);
-      }
-    }
-    
-    console.log(`🎯 First turn: ${data.firstPlayer}`);
-    console.log(`🎯 Is my turn: ${String(data.firstPlayer) === String(user.id)}`);
-    
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
   function handleDiceRolled(data) {
-    console.log('🎲 Dice rolled:', data);
     const { playerId, diceValue: rolledValue, newSixCount } = data;
     
     setRollCount(prev => prev + 1);
@@ -371,11 +226,9 @@ export default function SixKingGame() {
         if (String(playerId) === String(user.id)) {
           // I rolled the dice, update my sixes AFTER delay
           setPlayerSixes(newSixCount);
-          console.log(`👑 My sixes updated after delay: ${newSixCount}`);
         } else {
           // Opponent rolled the dice, update opponent's sixes AFTER delay
           setOpponentSixes(newSixCount);
-          console.log(`🤖 Opponent sixes updated after delay: ${newSixCount}`);
         }
       }, 2000); // Crown badges update 300ms after six effects
       
@@ -387,17 +240,11 @@ export default function SixKingGame() {
   }
 
   function handleTurnChanged(data) {
-    console.log('🔄 Turn changed:', data);
-    console.log(`🎯 Next turn: ${data.nextPlayer}`);
-    console.log(`🎯 My ID: ${user.id}`);
-    console.log(`🎯 Is my turn: ${String(data.nextPlayer) === String(user.id)}`);
-    
     setCurrentTurn(data.nextPlayer);
     setIsProcessingTurn(false);
   }
 
   function handleGameEnded(data) {
-    console.log('🏆 Game ended:', data);
     const rolledValue = 6;
     animateDiceRoll(rolledValue, () => {
       // Haptic feedback immediately
@@ -451,25 +298,11 @@ export default function SixKingGame() {
   // Game actions
   const rollDice = () => {
     const currentPlayerId = user.id || initializePlayerId();
-    console.log('🎲 Roll dice attempt');
-    console.log(`🔍 Current turn: ${currentTurn}`);
-    console.log(`🔍 My player ID: ${currentPlayerId}`);
-    console.log(`🔍 Is my turn: ${String(currentTurn) === String(currentPlayerId)}`);
-    console.log(`🔍 Game state: ${gameState}`);
-    console.log(`🔍 Can roll conditions:`);
-    console.log(`  - Is my turn: ${String(currentTurn) === String(currentPlayerId)}`);
-    console.log(`  - Game playing: ${gameState === 'playing'}`);
-    console.log(`  - Not rolling: ${!isRolling}`);
-    console.log(`  - Not processing: ${!isProcessingTurn}`);
-    console.log(`  - Not waiting: ${!waitingForOpponent}`);
-    
     const canRoll = String(currentTurn) === String(currentPlayerId) && 
                    gameState === 'playing' && 
                    !isRolling && 
                    !isProcessingTurn && 
                    !waitingForOpponent;
-
-    console.log(`🔍 Final can roll: ${canRoll}`);
 
     if (!canRoll) {
       console.log('❌ Cannot roll dice - conditions not met');
@@ -673,28 +506,6 @@ export default function SixKingGame() {
   const isMyTurn = () => {
     const currentPlayerId = user.id || (user?.id || `player_${Date.now()}`);
     return String(currentTurn) === String(currentPlayerId);
-  };
-
-  // FIXED: Fixed the turn indicator logic to show correct rolling states
-  const getTurnIndicatorText = () => {
-    if (waitingForOpponent) {
-      return 'Waiting for opponent...';
-    }
-    
-    // Check if someone is currently rolling
-    if (currentRollingPlayer) {
-      if (String(currentRollingPlayer) === String(user.id)) {
-        return 'Rolling...';
-      } else {
-        return 'Opponent Rolling...';
-      }
-    }
-    
-    if (isMyTurn()) {
-      return !isRolling && !isProcessingTurn ? 'Your Turn!' : '';
-    } else {
-      return 'Opponent Playing...';
-    }
   };
 
   const getDisabledButtonText = () => {

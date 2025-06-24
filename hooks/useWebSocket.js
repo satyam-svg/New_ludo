@@ -1,8 +1,9 @@
 // hooks/useWebSocket.js - OPTIMIZED FOR GAMES
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import config from '../config';
 
-const WEBSOCKET_URL = 'ws://192.168.1.4:5000/ws';
+const WEBSOCKET_URL = config.BASE_URL.replace(/^http/, 'ws') + '/ws';
 
 // Singleton WebSocket instance
 let globalSocket = null;
