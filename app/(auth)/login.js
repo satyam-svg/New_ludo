@@ -19,7 +19,7 @@ import { useAuth } from '../../hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Add this import
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'http://192.168.1.4:5000/api/users';
+const API_BASE_URL = 'http://192.168.1.2:5000/api/users';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');

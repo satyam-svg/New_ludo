@@ -83,7 +83,7 @@ export default function HomeScreen() {
             throw new Error('No authentication token found');
           }
           
-          const response = await fetch('http://192.168.1.7:5000/api/users/me', {
+          const response = await fetch('http://192.168.1.2:5000/api/users/me', {
             headers: {
               'Authorization': `Bearer ${token}`
             }

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-const WEBSOCKET_URL = 'ws://192.168.1.4:5000/ws';
+const WEBSOCKET_URL = 'ws://192.168.1.2:5000/ws';
 
 // Singleton WebSocket instance
 let globalSocket = null;

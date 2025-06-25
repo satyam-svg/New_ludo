@@ -39,7 +39,7 @@ export function AuthProvider({ children }) {
   const fetchUserData = async (authToken) => {
     try {
       // console.log(authToken);
-      const response = await fetch('http://192.168.1.7:5000/api/users/me', {
+      const response = await fetch('http://192.168.1.2:5000/api/users/me', {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
