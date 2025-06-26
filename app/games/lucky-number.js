@@ -730,8 +730,85 @@ const styles = StyleSheet.create({
     left: '50%',
     top: 0,
   },
-});
-    // app/games/lucky-number.js
+  // Loading Modal Styles for Leave Game
+  loadingOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  loadingModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  loadingCard: {
+    width: '85%',
+    maxWidth: 320,
+    borderRadius: 25,
+    overflow: 'hidden',
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.6,
+    shadowRadius: 25,
+  },
+  loadingCardGradient: {
+    padding: 40,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  exitIconContainer: {
+    marginBottom: 20,
+    padding: 15,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  loadingTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+    textShadowColor: 'rgba(255, 107, 107, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 30,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  spinnerContainer: {
+    marginBottom: 25,
+    padding: 10,
+  },
+  loadingSpinner: {
+    transform: [{ scale: 1.2 }],
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 165, 0, 0.3)',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#FFA500',
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+});// app/games/lucky-number.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -742,7 +819,9 @@ import {
   Animated,
   BackHandler,
   Easing,
-  Alert
+  Alert,
+  Modal,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -774,6 +853,8 @@ export default function LuckyNumberGame() {
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [rollingDiceValue, setRollingDiceValue] = useState(1);
   const [isFinalizingGame, setIsFinalizingGame] = useState(false);
+  const gameIdRef = useRef(null);
+  const [isLeavingGame, setIsLeavingGame] = useState(false);
 
   // Add this new state for rolling animation
   // Add this new useEffect for rolling animation
@@ -834,23 +915,12 @@ export default function LuckyNumberGame() {
   const apiCall = async (endpoint, method = 'GET', body = null) => {
     try {
       // TODO: Uncomment when JWT is implemented
-      /*
       const token = await AsyncStorage.getItem('authToken');
       const config = {
         method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
-      };
-      */
-      
-      // TEMPORARY: No authentication
-      const config = {
-        method,
-        headers: {
-          'Content-Type': 'application/json'
-          // Authorization header commented out for now
         }
       };
 
@@ -971,22 +1041,44 @@ export default function LuckyNumberGame() {
   }, [hasWon]);
 
   const handleBackPress = () => {
+    // Prevent back press if already leaving
+    if (isLeavingGame) return true;
+    
     Alert.alert(
       'Leave Game',
       'Are you sure you want to leave? You will lose your stake.',
       [
         { text: 'Stay', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: () => router.back() }
+        { text: 'Leave', style: 'destructive', onPress: () => leave_game() }
       ]
     );
     return true;
   };
 
+  const leave_game = async () => {
+    try {
+      setIsLeavingGame(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const response = await apiCall('/lucky-number/leave_game', 'POST', {
+        gameId: gameIdRef.current
+      });
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/");
+      
+    } catch (error) {
+      setIsLeavingGame(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', error.message || 'Failed to leave game');
+      console.error('Error leaving game:', error);
+    }
+  };
+  
   const selectLuckyNumber = async (number) => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setIsStartingGame(true);
-
       // Start game on backend
       const response = await apiCall('/lucky-number/start', 'POST', {
         stake: parseFloat(stake),
@@ -994,7 +1086,9 @@ export default function LuckyNumberGame() {
       });
 
       if (response.success) {
-        setGameId(response.gameId);
+        const newGameId = response.gameId;
+        gameIdRef.current = newGameId; 
+        setGameId(newGameId);
         setLuckyNumber(number);
         setGameState('rolling');
         setWinAmount(response.winAmount);
@@ -1133,7 +1227,7 @@ export default function LuckyNumberGame() {
               // Finalize game after showing result
               setTimeout(() => {
                 finalizeGame(response.gameResult);
-              }, 2500); // More time to appreciate the result
+              }, 100); // More time to appreciate the result
             }
           });
 
@@ -1607,20 +1701,8 @@ export default function LuckyNumberGame() {
           
           <View style={styles.resultButtons}>
             <TouchableOpacity 
-              style={styles.playAgainButton}
-              onPress={resetGame}
-            >
-              <LinearGradient
-                colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
-                style={styles.resultButtonGradient}
-              >
-                <MaterialIcons name="refresh" size={20} color="#fff" />
-                <Text style={styles.playAgainText}>Try Again</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity 
               style={styles.exitButton}
-              onPress={() => router.back()}
+              onPress={() => router.replace("/")}
             >
               <View style={styles.exitButtonInner}>
                 <MaterialIcons name="exit-to-app" size={20} color="#fff" />
@@ -1670,9 +1752,64 @@ export default function LuckyNumberGame() {
         />
       ))}
 
+      {/* Loading Modal for Leave Game */}
+      {isLeavingGame && (
+        <Modal
+          visible={isLeavingGame}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {}}
+        >
+          <View style={styles.loadingOverlay}>
+            <LinearGradient
+              colors={['rgba(0, 0, 0, 0.8)', 'rgba(26, 26, 46, 0.9)']}
+              style={styles.loadingModalContainer}
+            >
+              <View style={styles.loadingCard}>
+                <LinearGradient
+                  colors={['#1a1a2e', '#16213e', '#0f3460']}
+                  style={styles.loadingCardGradient}
+                >
+                  {/* Animated Exit Icon */}
+                  <View style={styles.exitIconContainer}>
+                    <MaterialIcons name="exit-to-app" size={60} color="#FF6B6B" />
+                  </View>
+                  
+                  {/* Loading Title */}
+                  <Text style={styles.loadingTitle}>Leaving Game...</Text>
+                  <Text style={styles.loadingSubtitle}>Processing your request</Text>
+                  
+                  {/* Animated Loading Spinner */}
+                  <View style={styles.spinnerContainer}>
+                    <ActivityIndicator 
+                      size="large" 
+                      color="#FF6B6B" 
+                      style={styles.loadingSpinner}
+                    />
+                  </View>
+                  
+                  {/* Warning Message */}
+                  <View style={styles.warningContainer}>
+                    <MaterialIcons name="warning" size={16} color="#FFA500" />
+                    <Text style={styles.warningText}>Please don't close the app</Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            </LinearGradient>
+          </View>
+        </Modal>
+      )}
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+        <TouchableOpacity 
+          style={[
+            styles.backButton,
+            isLeavingGame && { opacity: 0.5 }
+          ]} 
+          onPress={handleBackPress}
+          disabled={isLeavingGame}
+        >
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         
@@ -1699,10 +1836,10 @@ export default function LuckyNumberGame() {
           <TouchableOpacity
             style={[
               styles.rollButton, 
-              (isRolling || isFinalizingGame) && styles.rollButtonDisabled
+              (isRolling || isFinalizingGame || isLeavingGame) && styles.rollButtonDisabled
             ]}
             onPress={rollDice}
-            disabled={isRolling || isFinalizingGame}
+            disabled={isRolling || isFinalizingGame || isLeavingGame}
             activeOpacity={0.8}
           >
             <LinearGradient
