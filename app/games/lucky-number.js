@@ -943,9 +943,9 @@ export default function LuckyNumberGame() {
   };
 
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
-    return () => backHandler.remove();
-  }, []);
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+      return () => backHandler.remove();
+    }, [gameState, gameId, luckyNumber, isLeavingGame, isStartingGame, showResult]);
 
   useEffect(() => {
     if (gameState === 'selecting') {
@@ -1043,15 +1043,32 @@ export default function LuckyNumberGame() {
   const handleBackPress = () => {
     // Prevent back press if already leaving
     if (isLeavingGame) return true;
+
+    if (gameState === 'finished' || showResult) {
+      return true; // Prevent default back behavior but don't show alert
+    }
+
+    // If user hasn't selected a number yet OR no game ID exists, simply go back without alert
+    if (gameState === 'selecting' && !gameId && !luckyNumber) {
+      router.back();
+      return true;
+    }
+
+    // If game has started (has gameId, luckyNumber, or is in rolling state), show confirmation alert
+    if (gameId || luckyNumber || gameState === 'rolling' || isStartingGame) {
+      Alert.alert(
+        'Leave Game',
+        'Are you sure you want to leave? You will lose your stake.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: () => leave_game() }
+        ]
+      );
+      return true;
+    }
     
-    Alert.alert(
-      'Leave Game',
-      'Are you sure you want to leave? You will lose your stake.',
-      [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: () => leave_game() }
-      ]
-    );
+    // Fallback: simple back navigation
+    router.back();
     return true;
   };
 
@@ -1706,7 +1723,7 @@ export default function LuckyNumberGame() {
             >
               <View style={styles.exitButtonInner}>
                 <MaterialIcons name="exit-to-app" size={20} color="#fff" />
-                <Text style={styles.exitText}>Exit</Text>
+                <Text style={styles.exitText}>Home</Text>
               </View>
             </TouchableOpacity>
           </View>

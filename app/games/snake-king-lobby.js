@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   Alert,
   Dimensions,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useLocalSearchParams , router} from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -54,12 +56,26 @@ export default function ModeSelectionScreen({ navigation }) {
   const { stake } = useLocalSearchParams();
   const { user, updateWallet } = useAuth();
 
+  // Handle back button press
+  const handleBack = () => {
+    router.back();
+    return true; // Prevent default back behavior
+  };
+
+  // Device back button handler
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    
+    return () => {
+      backHandler.remove();
+    };
+  }, []);
+
   const selectMode = (mode) => {
     if (stake > user.wallet) {
       Alert.alert('Insufficient Balance', 'You don\'t have enough coins to place this bet.');
       return;
     }
-    
     
     router.push({
         pathname: '/games/snake-game',
@@ -69,13 +85,27 @@ export default function ModeSelectionScreen({ navigation }) {
             wallet: user.wallet,
             updateWallet: updateWallet
         }
-        });
+    });
     return;
   };
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
+        {/* Header with Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          
+          <View style={styles.headerTitle}>
+            <Text style={styles.headerText}>Choose Game Mode</Text>
+          </View>
+          
+          {/* Empty view for balanced layout */}
+          <View style={styles.headerSpacer} />
+        </View>
+
         {/* Dice Icon */}
         <View style={styles.diceContainer}>
           <Text style={styles.diceIcon}>🐍</Text>
@@ -140,9 +170,42 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  // Header styles
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 15,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 40,
+    height: 40,
+  },
+  headerTitle: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  headerSpacer: {
+    width: 40, // Same width as back button for balance
+  },
   diceContainer: {
     alignItems: 'center',
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 10,
   },
   diceIcon: {
@@ -193,12 +256,12 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   cardContent: {
-    padding: 24,
+    padding: 18,
   },
   modeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   modeEmoji: {
     fontSize: 24,
@@ -211,16 +274,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modeDescription: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 16,
-    lineHeight: 22,
+    marginBottom: 12,
+    lineHeight: 20,
   },
   payoutText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -231,7 +294,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
-    padding: 12,
+    padding: 10,
   },
   winLabel: {
     fontSize: 14,

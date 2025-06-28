@@ -8,7 +8,8 @@ import {
   Dimensions,
   Animated,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  BackHandler
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -35,6 +36,12 @@ export default function HomeScreen() {
 
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
   const slideAnim = React.useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+  const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackToGames);
+      return () => {
+        backHandler.remove();
+      };
+    }, []);
 
   const games = [
     {
@@ -204,6 +211,7 @@ export default function HomeScreen() {
       duration: 300,
       useNativeDriver: true,
     }).start();
+    return true;
   };
 
   return (

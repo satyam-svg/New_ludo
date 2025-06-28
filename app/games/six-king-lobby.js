@@ -9,7 +9,8 @@ import {
   FlatList,
   ActivityIndicator,
   Share,
-  TextInput
+  TextInput,
+  BackHandler
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -30,6 +31,12 @@ export default function SixKingLobby() {
   const [connectedPlayers, setConnectedPlayers] = useState(0);
 
   const predefinedStakes = [50, 100, 250, 500, 1000, 2500];
+  useEffect(() => {
+  const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
+      return () => {
+        backHandler.remove();
+      };
+    }, []);
 
   const { isConnected, sendMessage, disconnect, connectionError } = useWebSocket({
     onMessage: handleWebSocketMessage,

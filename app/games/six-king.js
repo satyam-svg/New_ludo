@@ -664,19 +664,6 @@ export default function SixKingGame() {
               {/* Action Buttons */}
               {/* Action Buttons */}
               <View style={styles.gameEndActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={handleTryAgain}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={['#8B5CF6', '#EC4899']}
-                    style={styles.actionButtonGradient}
-                  >
-                    <MaterialIcons name="refresh" size={scale(20)} color="#fff" />
-                    <Text style={styles.actionButtonText}>TRY AGAIN</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.actionButton}
