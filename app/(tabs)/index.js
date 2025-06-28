@@ -137,15 +137,16 @@ export default function HomeScreen() {
       description: 'Play in time slots\nWin 10x your stake!',
       icon: 'schedule',
       gradient: ['#8B5CF6', '#7C3AED'],
-      multiplier: '10x'
+      multiplier: '10x',
+      isMultiplayer: true,
     },
     {
       id: 'snake-king',
       title: 'Snake King',
-      description: 'Beat snakes \nWin upto 15x your stake!',
+      description: 'Beat snakes \nWin upto 16x your stake!',
       icon: 'bug-report',
       gradient: ['#4E9525', '#2B5E20'],
-      multiplier: '2x - 15x'
+      multiplier: '2x - 16x'
     }
   ];
 
@@ -384,9 +385,15 @@ export default function HomeScreen() {
           params: { stake: selectedStake }
         });
       }
-      else if (selectedGame.id == 'snake-king'){
+      else if (selectedGame.id === 'snake-king'){
         router.push({
           pathname: '/games/snake-king-lobby',
+          params: { stake: selectedStake }
+        });
+      }
+      else if (selectedGame.id === 'lucky-number'){
+        router.push({
+          pathname: `/games/lucky-number-lobby`,
           params: { stake: selectedStake }
         });
       }

@@ -40,7 +40,8 @@ const SNAKES = {
   30: 1,
   
   // Second 30 cells (31-60) - 7 snakes
-  47: 1,
+  34: 1,
+  46: 1,
   49: 1,
   56: 1,
   54: 1,
@@ -69,15 +70,19 @@ const LADDERS = {
   // Mid-lower section (26-50) - 3 ladders
   28: 44,
   32: 51,
+  33: 88,
+  35: 55,
   42: 63,
   
   // Mid-upper section (51-75) - 3 ladders
   57: 76,
+  59: 99,
   62: 81,
   71: 90,
   37: 45,
-  66: 74,
+  66: 85,
   64: 77,
+  67: 86,
   78: 82
   
   // Upper section (76-95) - 0 ladders (too close to finish)
@@ -598,20 +603,6 @@ export default function SnakeGameScreen() {
                     result: 'won',
                     reason: 'reached_finish',
                     finalPosition: 100,
-                    rollsUsed: currentRoll + 1
-                  });
-                }, 1000);
-              }
-              // FIXED: Check if max rolls reached after ladder (survival win)
-              else if (currentRoll + 1 >= mode.rolls) {
-                setGameStatus('won');
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                
-                setTimeout(() => {
-                  finalizeGame({
-                    result: 'won',
-                    reason: 'survived_all_rolls',
-                    finalPosition: ladderEnd,
                     rollsUsed: currentRoll + 1
                   });
                 }, 1000);

@@ -32,7 +32,7 @@ const GAME_MODES = [
   },
   { 
     rolls: 8, 
-    multiplier: 3, 
+    multiplier: 4, 
     name: 'Daredevil', 
     description: 'For brave players • 8 rolls of excitement',
     emoji: '⚡',
@@ -42,7 +42,7 @@ const GAME_MODES = [
   },
   { 
     rolls: 12, 
-    multiplier: 6, 
+    multiplier: 8, 
     name: 'Snake Master', 
     description: 'High risk, high reward • 12-roll marathon',
     emoji: '🔥',
@@ -52,7 +52,7 @@ const GAME_MODES = [
   },
   { 
     rolls: 15, 
-    multiplier: 10, 
+    multiplier: 16, 
     name: 'Legendary', 
     description: 'Only for the fearless • Ultimate 15-roll test',
     emoji: '💎',
