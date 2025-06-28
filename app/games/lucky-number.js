@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
   },
   gameTitle: {
-    fontSize: 32,
+    fontSize: 25,
     fontWeight: '900',
     color: '#4ECDC4',
     textAlign: 'center',

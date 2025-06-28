@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   Share,
   TextInput,
-  BackHandler
+  BackHandler,
+  Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -18,6 +19,8 @@ import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import * as Haptics from 'expo-haptics';
+
+const { width } = Dimensions.get('window');
 
 export default function SixKingLobby() {
   const { user } = useAuth();
@@ -293,12 +296,17 @@ export default function SixKingLobby() {
         setCustomStake('');
       }}
     >
-      <Text style={[
-        styles.stakeOptionText,
-        selectedStake === item && styles.stakeOptionTextSelected
-      ]}>
-        ₹{item}
-      </Text>
+      <LinearGradient
+        colors={selectedStake === item ? ['#6366F1', '#8B5CF6'] : ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)']}
+        style={styles.stakeOptionGradient}
+      >
+        <Text style={[
+          styles.stakeOptionText,
+          selectedStake === item && styles.stakeOptionTextSelected
+        ]}>
+          ₹{item}
+        </Text>
+      </LinearGradient>
     </TouchableOpacity>
   );
 
@@ -306,33 +314,50 @@ export default function SixKingLobby() {
   if (lobbyState === 'waiting' || lobbyState === 'creating' || lobbyState === 'joining' || lobbyState === 'matched') {
     return (
       <LinearGradient
-        colors={['#1a1a2e', '#16213e', '#0f3460', '#533483']}
+        colors={['#0F0C29', '#24243e', '#302B63', '#0F0C29']}
         style={styles.container}
       >
         <View style={styles.waitingContainer}>
-          <MaterialIcons 
-            name={lobbyState === 'matched' ? 'check-circle' : 'hourglass-empty'} 
-            size={80} 
-            color={lobbyState === 'matched' ? '#4ECDC4' : '#FFD700'} 
-          />
+          <View style={styles.waitingIconContainer}>
+            <LinearGradient
+              colors={lobbyState === 'matched' ? ['#10B981', '#059669'] : ['#F59E0B', '#D97706']}
+              style={styles.waitingIconGradient}
+            >
+              <MaterialIcons 
+                name={lobbyState === 'matched' ? 'check-circle' : 'hourglass-empty'} 
+                size={50} 
+                color="#fff" 
+              />
+            </LinearGradient>
+          </View>
           
           <Text style={styles.waitingTitle}>
             {lobbyState === 'creating' ? 'Creating Game...' :
              lobbyState === 'joining' ? 'Joining Game...' :
              lobbyState === 'matched' ? 'Match Found!' :
-             'Waiting for Players'}
+             'Finding Players'}
           </Text>
           
           <Text style={styles.waitingMessage}>{waitingMessage}</Text>
           
           {createdGameCode && (
             <View style={styles.gameCodeContainer}>
-              <Text style={styles.gameCodeLabel}>Room Code:</Text>
+              <Text style={styles.gameCodeLabel}>Room Code</Text>
               <View style={styles.gameCodeBox}>
-                <Text style={styles.gameCodeText}>{createdGameCode}</Text>
-                <TouchableOpacity onPress={shareGameCode} style={styles.shareButton}>
-                  <MaterialIcons name="share" size={24} color="#4ECDC4" />
-                </TouchableOpacity>
+                <LinearGradient
+                  colors={['rgba(99, 102, 241, 0.2)', 'rgba(139, 92, 246, 0.2)']}
+                  style={styles.gameCodeBoxGradient}
+                >
+                  <Text style={styles.gameCodeText}>{createdGameCode}</Text>
+                  <TouchableOpacity onPress={shareGameCode} style={styles.shareButton}>
+                    <LinearGradient
+                      colors={['#6366F1', '#8B5CF6']}
+                      style={styles.shareButtonGradient}
+                    >
+                      <MaterialIcons name="share" size={20} color="#fff" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </LinearGradient>
               </View>
               <Text style={styles.shareHint}>Share this code with your opponent</Text>
               
@@ -342,7 +367,7 @@ export default function SixKingLobby() {
                   onPress={startGame}
                 >
                   <LinearGradient
-                    colors={['#4ECDC4', '#44A08D']}
+                    colors={['#10B981', '#059669']}
                     style={styles.startGameGradient}
                   >
                     <MaterialIcons name="play-arrow" size={24} color="#fff" />
@@ -354,11 +379,23 @@ export default function SixKingLobby() {
           )}
 
           {lobbyState !== 'matched' && (
-            <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 30 }} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366F1" />
+              <View style={styles.loadingDots}>
+                <View style={[styles.dot, styles.dot1]} />
+                <View style={[styles.dot, styles.dot2]} />
+                <View style={[styles.dot, styles.dot3]} />
+              </View>
+            </View>
           )}
 
           <TouchableOpacity style={styles.cancelButton} onPress={cancelWaiting}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <LinearGradient
+              colors={['rgba(239, 68, 68, 0.2)', 'rgba(220, 38, 38, 0.2)']}
+              style={styles.cancelButtonGradient}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -368,139 +405,136 @@ export default function SixKingLobby() {
   // Main lobby screen
   return (
     <LinearGradient
-      colors={['#1a1a2e', '#16213e', '#0f3460', '#533483']}
+      colors={['#0F0C29', '#24243e', '#302B63', '#0F0C29']}
       style={styles.container}
     >
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          <LinearGradient
+            colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+            style={styles.backButtonGradient}
+          >
+            <MaterialIcons name="arrow-back" size={20} color="#fff" />
+          </LinearGradient>
         </TouchableOpacity>
-        <Text style={styles.title}>🎲 Six King Multiplayer 👑</Text>
+        
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Six King</Text>
+          <Text style={styles.titleEmoji}>👑</Text>
+        </View>
+        
         <View style={styles.walletDisplay}>
-          <MaterialIcons name="account-balance-wallet" size={20} color="#4ECDC4" />
-          <Text style={styles.walletText}>₹{user.wallet}</Text>
+          <LinearGradient
+            colors={['#10B981', '#059669']}
+            style={styles.walletGradient}
+          >
+            <MaterialIcons name="account-balance-wallet" size={16} color="#fff" />
+            <Text style={styles.walletText}>₹{user.wallet}</Text>
+          </LinearGradient>
         </View>
       </View>
 
       {/* Connection Status */}
       {!isConnected && (
         <View style={styles.connectionWarning}>
-          <MaterialIcons name="wifi-off" size={20} color="#FF6B6B" />
-          <Text style={styles.connectionWarningText}>
-            {connectionError || 'Connecting to server...'}
-          </Text>
+          <LinearGradient
+            colors={['rgba(239, 68, 68, 0.2)', 'rgba(220, 38, 38, 0.2)']}
+            style={styles.connectionWarningGradient}
+          >
+            <MaterialIcons name="wifi-off" size={20} color="#EF4444" />
+            <Text style={styles.connectionWarningText}>
+              {connectionError || 'Connecting to server...'}
+            </Text>
+          </LinearGradient>
         </View>
       )}
 
       <View style={styles.content}>
         {/* Stake Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Stake Amount</Text>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="monetization-on" size={24} color="#6366F1" />
+            <Text style={styles.sectionTitle}>Select Stake</Text>
+          </View>
           
-          <FlatList
-            data={predefinedStakes}
-            renderItem={renderStakeOption}
-            keyExtractor={(item) => item.toString()}
-            numColumns={3}
-            style={styles.stakeGrid}
-            contentContainerStyle={styles.stakeGridContent}
-          />
-          
-          {/* <View style={styles.customStakeContainer}>
-            <Text style={styles.customStakeLabel}>Custom Amount:</Text>
-            <TextInput
-              style={styles.customStakeInput}
-              placeholder="Enter amount"
-              placeholderTextColor="#888"
-              value={customStake}
-              onChangeText={setCustomStake}
-              keyboardType="numeric"
-              maxLength={6}
+          <View style={styles.stakeContainer}>
+            <FlatList
+              data={predefinedStakes}
+              renderItem={renderStakeOption}
+              keyExtractor={(item) => item.toString()}
+              numColumns={3}
+              style={styles.stakeGrid}
+              contentContainerStyle={styles.stakeGridContent}
+              scrollEnabled={false}
             />
-          </View> */}
+          </View>
         </View>
 
-        {/* Game Options */}
+        {/* Game Mode */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose Game Mode</Text>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="sports-esports" size={24} color="#8B5CF6" />
+            <Text style={styles.sectionTitle}>Game Mode</Text>
+          </View>
           
-          {/* Quick Match */}
           <TouchableOpacity
             style={styles.gameOption}
             onPress={quickMatch}
             disabled={isLoading || !isConnected}
           >
             <LinearGradient
-              colors={['#4ECDC4', '#44A08D']}
+              colors={['#6366F1', '#8B5CF6']}
               style={styles.gameOptionGradient}
             >
-              <MaterialIcons name="flash-on" size={28} color="#fff" />
+              <View style={styles.gameOptionIcon}>
+                <MaterialIcons name="flash-on" size={32} color="#fff" />
+              </View>
               <View style={styles.gameOptionContent}>
                 <Text style={styles.gameOptionTitle}>Quick Match</Text>
                 <Text style={styles.gameOptionSubtitle}>
-                  Find opponent instantly • ₹{getCurrentStake()}
+                  Find opponent instantly
                 </Text>
+                <View style={styles.stakeDisplay}>
+                  <MaterialIcons name="monetization-on" size={16} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.stakeAmount}>₹{getCurrentStake()}</Text>
+                </View>
               </View>
+              <MaterialIcons name="arrow-forward-ios" size={20} color="rgba(255,255,255,0.7)" />
             </LinearGradient>
           </TouchableOpacity>
-
-          {/* Create Game */}
-          {/* <TouchableOpacity
-            style={styles.gameOption}
-            onPress={createGame}
-            disabled={isLoading || !isConnected}
-          >
-            <LinearGradient
-              colors={['#8B5CF6', '#EC4899']}
-              style={styles.gameOptionGradient}
-            >
-              <MaterialIcons name="add-circle" size={28} color="#fff" />
-              <View style={styles.gameOptionContent}>
-                <Text style={styles.gameOptionTitle}>Create Private Game</Text>
-                <Text style={styles.gameOptionSubtitle}>
-                  Play with friends • ₹{getCurrentStake()}
-                </Text>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity> */}
-
-          {/* Join Game */}
-          {/* <View style={styles.joinGameContainer}>
-            <TextInput
-              style={styles.gameCodeInput}
-              placeholder="Enter room code"
-              placeholderTextColor="#888"
-              value={gameCode}
-              onChangeText={setGameCode}
-              autoCapitalize="characters"
-              maxLength={6}
-            />
-            <TouchableOpacity
-              style={styles.joinButton}
-              onPress={joinGame}
-              disabled={isLoading || !isConnected || !gameCode.trim()}
-            >
-              <LinearGradient
-                colors={['#FF6B6B', '#FF8E8E']}
-                style={styles.joinButtonGradient}
-              >
-                <MaterialIcons name="login" size={24} color="#fff" />
-                <Text style={styles.joinButtonText}>Join</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View> */}
         </View>
-      </View>
 
-      {/* Game Rules */}
-      <View style={styles.rulesContainer}>
-        <Text style={styles.rulesTitle}>🎯 Game Rules</Text>
-        <Text style={styles.rulesText}>
-          • First player to roll 3 sixes wins{'\n'}
-          • Winner takes double the stake{'\n'}
-          • Random first turn{'\n'}
-          • Play against real opponents
-        </Text>
+        {/* Game Rules */}
+        <View style={styles.rulesSection}>
+          <LinearGradient
+            colors={['rgba(139, 92, 246, 0.1)', 'rgba(99, 102, 241, 0.1)']}
+            style={styles.rulesContainer}
+          >
+            <View style={styles.rulesHeader}>
+              <MaterialIcons name="info" size={20} color="#8B5CF6" />
+              <Text style={styles.rulesTitle}>Game Rules</Text>
+            </View>
+            <View style={styles.rulesList}>
+              <View style={styles.ruleItem}>
+                <Text style={styles.ruleBullet}>🎯</Text>
+                <Text style={styles.ruleText}>First to roll 3 sixes wins</Text>
+              </View>
+              <View style={styles.ruleItem}>
+                <Text style={styles.ruleBullet}>💰</Text>
+                <Text style={styles.ruleText}>Winner takes double stake</Text>
+              </View>
+              <View style={styles.ruleItem}>
+                <Text style={styles.ruleBullet}>🎲</Text>
+                <Text style={styles.ruleText}>Random first turn</Text>
+              </View>
+              <View style={styles.ruleItem}>
+                <Text style={styles.ruleBullet}>👥</Text>
+                <Text style={styles.ruleText}>Real-time multiplayer</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
       </View>
     </LinearGradient>
   );
@@ -519,39 +553,58 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   backButton: {
-    padding: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    flex: 1,
+  backButtonGradient: {
+    padding: 12,
   },
-  walletDisplay: {
+  titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(78, 205, 196, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 1,
+  },
+  titleEmoji: {
+    fontSize: 28,
+    marginLeft: 8,
+  },
+  walletDisplay: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  walletGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   walletText: {
-    color: '#4ECDC4',
-    fontWeight: 'bold',
-    marginLeft: 4,
+    color: '#fff',
+    fontWeight: '700',
+    marginLeft: 6,
+    fontSize: 14,
   },
   connectionWarning: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  connectionWarningGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    backgroundColor: 'rgba(255, 107, 107, 0.2)',
-    marginHorizontal: 20,
-    borderRadius: 10,
+    paddingVertical: 12,
   },
   connectionWarningText: {
-    color: '#FF6B6B',
+    color: '#EF4444',
     marginLeft: 8,
     fontWeight: '600',
   },
@@ -560,141 +613,142 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   section: {
-    marginBottom: 50,
+    marginBottom: 32,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#fff',
-    marginBottom: 15,
+    marginLeft: 12,
+  },
+  stakeContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   stakeGrid: {
-    maxHeight: 120,
+    maxHeight: 140,
   },
   stakeGridContent: {
     justifyContent: 'space-between',
   },
   stakeOption: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    margin: 5,
-    paddingVertical: 12,
-    borderRadius: 10,
+    margin: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
+  },
+  stakeOptionGradient: {
+    paddingVertical: 16,
+    paddingHorizontal: 8,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderRadius: 12,
   },
   stakeOptionSelected: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderColor: '#FFD700',
+    transform: [{ scale: 1.05 }],
   },
   stakeOptionText: {
-    color: '#fff',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontWeight: '600',
     fontSize: 16,
   },
   stakeOptionTextSelected: {
-    color: '#FFD700',
-    fontWeight: 'bold',
-  },
-  customStakeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 15,
-  },
-  customStakeLabel: {
     color: '#fff',
-    fontSize: 16,
-    marginRight: 10,
-  },
-  customStakeInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    fontWeight: '800',
   },
   gameOption: {
-    marginBottom: 15,
-    borderRadius: 15,
+    borderRadius: 20,
     overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   gameOptionGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+  },
+  gameOptionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   gameOptionContent: {
-    marginLeft: 15,
+    marginLeft: 20,
     flex: 1,
   },
   gameOptionTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   gameOptionSubtitle: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 14,
-    marginTop: 2,
-  },
-  joinGameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  gameCodeInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 16,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  joinButton: {
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  joinButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  joinButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  rulesContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    margin: 50, // Reduced margin to allow more space
-    padding: 30, // Increased padding for more internal space
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    minHeight: 200, // Added minimum height
-    width: '90%', // Set specific width percentage
-    alignSelf: 'center', // Center the container
-  },
-  rulesTitle: {
-    color: '#FFD700',
-    fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
-  rulesText: {
-    color: '#fff',
+  stakeDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stakeAmount: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '600',
+    marginLeft: 4,
+    fontSize: 16,
+  },
+  rulesSection: {
+    marginTop: 20,
+  },
+  rulesContainer: {
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  rulesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  rulesTitle: {
+    color: '#8B5CF6',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  rulesList: {
+    gap: 12,
+  },
+  ruleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ruleBullet: {
+    fontSize: 16,
+    marginRight: 12,
+    width: 24,
+    textAlign: 'center',
+  },
+  ruleText: {
+    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 15,
-    lineHeight: 40,
+    fontWeight: '500',
+    flex: 1,
   },
   // Waiting screen styles
   waitingContainer: {
@@ -703,83 +757,138 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
+  waitingIconContainer: {
+    borderRadius: 50,
+    overflow: 'hidden',
+    marginBottom: 32,
+  },
+  waitingIconGradient: {
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   waitingTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     color: '#fff',
-    marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   waitingMessage: {
     fontSize: 16,
-    color: '#BBB',
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 32,
+    lineHeight: 24,
   },
   gameCodeContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 24,
+    width: '100%',
   },
   gameCodeLabel: {
-    color: '#FFD700',
+    color: '#8B5CF6',
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontWeight: '700',
+    marginBottom: 16,
   },
   gameCodeBox: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: 280,
+  },
+  gameCodeBoxGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderRadius: 15,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
     borderWidth: 2,
-    borderColor: '#FFD700',
+    borderColor: 'rgba(99, 102, 241, 0.5)',
   },
   gameCodeText: {
     color: '#fff',
     fontSize: 24,
-    fontWeight: 'bold',
-    letterSpacing: 2,
-    marginRight: 15,
+    fontWeight: '800',
+    letterSpacing: 3,
+    flex: 1,
+    textAlign: 'center',
   },
   shareButton: {
-    padding: 5,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  shareButtonGradient: {
+    padding: 8,
   },
   shareHint: {
-    color: '#888',
+    color: 'rgba(255, 255, 255, 0.5)',
     fontSize: 12,
-    marginTop: 8,
+    marginTop: 12,
+    textAlign: 'center',
   },
   startGameButton: {
-    marginTop: 20,
-    borderRadius: 15,
+    marginTop: 24,
+    borderRadius: 16,
     overflow: 'hidden',
+    width: '100%',
+    maxWidth: 200,
   },
   startGameGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
   },
   startGameText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 18,
-    marginLeft: 10,
+    marginLeft: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    marginVertical: 32,
+  },
+  loadingDots: {
+    flexDirection: 'row',
+    marginTop: 16,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#6366F1',
+    marginHorizontal: 4,
+  },
+  dot1: {
+    opacity: 0.4,
+  },
+  dot2: {
+    opacity: 0.7,
+  },
+  dot3: {
+    opacity: 1,
   },
   cancelButton: {
-    backgroundColor: 'rgba(255, 107, 107, 0.3)',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginTop: 30,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 32,
+    minWidth: 120,
+  },
+  cancelButtonGradient: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
     borderWidth: 1,
-    borderColor: '#FF6B6B',
+    borderColor: 'rgba(239, 68, 68, 0.5)',
   },
   cancelButtonText: {
-    color: '#FF6B6B',
-    fontWeight: 'bold',
+    color: '#EF4444',
+    fontWeight: '700',
     fontSize: 16,
+    textAlign: 'center',
   },
 });

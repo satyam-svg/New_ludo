@@ -39,7 +39,12 @@ const MatkaKingGame = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userSessions, setUserSessions] = useState([]);
-
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
+        return () => {
+          backHandler.remove();
+        };
+      }, []);
   // API Helper Function
   const apiCall = async (endpoint, method = 'GET', body = null) => {
     try {
@@ -175,7 +180,7 @@ const MatkaKingGame = () => {
 
   const calculateWinAmount = (amount) => {
     const num = parseFloat(amount) || 0;
-    return (num * 9.5).toFixed(2);
+    return (num * 10).toFixed(2);
   };
 
   const getSlotStatusColor = (status, hasUserBet = false) => {
@@ -247,7 +252,7 @@ const MatkaKingGame = () => {
           
           <View style={styles.titleContainer}>
             <Text style={styles.gameTitle}>MATKA KING</Text>
-            <Text style={styles.subtitle}>Win 9.5x Your Stake!</Text>
+            <Text style={styles.subtitle}>Win 10x Your Stake!</Text>
           </View>
           
           <View style={styles.stakeContainer}>
@@ -264,7 +269,7 @@ const MatkaKingGame = () => {
           >
             <MaterialIcons name="info" size={20} color="#FFD700" />
             <Text style={styles.infoBannerText}>
-              Choose your lucky number (0-9) • Minimum bet ₹10 • Win 9.5x your stake
+              Choose your lucky number (0-9) • Minimum bet ₹10 • Win 10x your stake
             </Text>
           </LinearGradient>
         </View>
@@ -325,7 +330,7 @@ const MatkaKingGame = () => {
                     
                     <View style={styles.payoutContainer}>
                       <MaterialIcons name="trending-up" size={16} color="#fff" />
-                      <Text style={styles.payoutText}>9.5x payout</Text>
+                      <Text style={styles.payoutText}>10x payout</Text>
                     </View>
                   </View>
 
@@ -395,7 +400,7 @@ const MatkaKingGame = () => {
                               { color: isWinner ? "#4ECDC4" : "#FF6B6B" }
                             ]}>
                               {isWinner 
-                                ? `🎉 YOU WON ₹${(userBet.amount * 9.5).toFixed(0)}!` 
+                                ? `🎉 YOU WON ₹${(userBet.amount * 10).toFixed(0)}!` 
                                 : `💔 YOU LOST ₹${userBet.amount}`
                               }
                             </Text>
