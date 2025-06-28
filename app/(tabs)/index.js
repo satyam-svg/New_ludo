@@ -138,6 +138,12 @@ export default function HomeScreen() {
       return;
     }
     
+    //For Matka game , go directly to game
+    if (game.id === 'matka-king') {
+      router.push('/games/matka-king');
+      return;
+    }
+
     // For other games, show stake selection
     Animated.timing(slideAnim, {
       toValue: 1,
