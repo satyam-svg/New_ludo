@@ -406,7 +406,7 @@ export default function SixKingLobby() {
             contentContainerStyle={styles.stakeGridContent}
           />
           
-          <View style={styles.customStakeContainer}>
+          {/* <View style={styles.customStakeContainer}>
             <Text style={styles.customStakeLabel}>Custom Amount:</Text>
             <TextInput
               style={styles.customStakeInput}
@@ -417,7 +417,7 @@ export default function SixKingLobby() {
               keyboardType="numeric"
               maxLength={6}
             />
-          </View>
+          </View> */}
         </View>
 
         {/* Game Options */}
@@ -445,7 +445,7 @@ export default function SixKingLobby() {
           </TouchableOpacity>
 
           {/* Create Game */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.gameOption}
             onPress={createGame}
             disabled={isLoading || !isConnected}
@@ -462,10 +462,10 @@ export default function SixKingLobby() {
                 </Text>
               </View>
             </LinearGradient>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           {/* Join Game */}
-          <View style={styles.joinGameContainer}>
+          {/* <View style={styles.joinGameContainer}>
             <TextInput
               style={styles.gameCodeInput}
               placeholder="Enter room code"
@@ -488,7 +488,7 @@ export default function SixKingLobby() {
                 <Text style={styles.joinButtonText}>Join</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </View> */}
         </View>
       </View>
 
@@ -497,9 +497,9 @@ export default function SixKingLobby() {
         <Text style={styles.rulesTitle}>🎯 Game Rules</Text>
         <Text style={styles.rulesText}>
           • First player to roll 3 sixes wins{'\n'}
-          • Winner takes double the stake amount{'\n'}
-          • Real-time multiplayer experience{'\n'}
-          • Play against real opponents worldwide
+          • Winner takes double the stake{'\n'}
+          • Random first turn{'\n'}
+          • Play against real opponents
         </Text>
       </View>
     </LinearGradient>
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   section: {
-    marginBottom: 30,
+    marginBottom: 50,
   },
   sectionTitle: {
     fontSize: 18,
@@ -676,11 +676,14 @@ const styles = StyleSheet.create({
   },
   rulesContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    margin: 20,
-    padding: 15,
+    margin: 50, // Reduced margin to allow more space
+    padding: 30, // Increased padding for more internal space
     borderRadius: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 200, // Added minimum height
+    width: '90%', // Set specific width percentage
+    alignSelf: 'center', // Center the container
   },
   rulesTitle: {
     color: '#FFD700',
@@ -690,8 +693,8 @@ const styles = StyleSheet.create({
   },
   rulesText: {
     color: '#fff',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 40,
   },
   // Waiting screen styles
   waitingContainer: {
