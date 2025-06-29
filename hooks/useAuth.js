@@ -4,6 +4,9 @@ import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 
 const AuthContext = React.createContext();
+import config from '../config';
+const API_BASE_URL = `${config.BASE_URL}/api/users`;
+
 
 export function useAuth() {
   return React.useContext(AuthContext);
@@ -39,7 +42,7 @@ export function AuthProvider({ children }) {
   const fetchUserData = async (authToken) => {
     try {
       // console.log(authToken);
-      const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+      const response = await fetch(API_BASE_URL+'/me', {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }

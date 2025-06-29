@@ -18,6 +18,8 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
 
 const { width } = Dimensions.get('window');
+import config from '../../config';
+const API_BASE_URL = `${config.BASE_URL}/api/users`;
 
 const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000];
 
@@ -54,7 +56,7 @@ export default function WalletScreen() {
         return;
       }
       
-      const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+      const response = await fetch(API_BASE_URL+"/me", {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -123,7 +125,7 @@ export default function WalletScreen() {
     try {
       // Send transaction to backend
       const token = await AsyncStorage.getItem('userToken');
-      const response = await fetch('http://192.168.1.2:5000/api/wallet/transaction', {
+      const response = await fetch(API_BASE_URL+'/api/wallet/transaction', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

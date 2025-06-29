@@ -1,12 +1,14 @@
 // Add this import at the top
 import { CFPaymentGatewayService } from 'react-native-cashfree-pg-sdk';
+import config from '../../config';
+const API_BASE_URL = `${config.BASE_URL}/api`;
 
 // Add this function inside your WalletScreen component
 const initiateCashfreePayment = async (amount) => {
   setLoading(true);
   try {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch('http://192.168.1.2:5000/api/payment/create-order', {
+    const response = await fetch(API_BASE_URL+'/payment/create-order', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,7 +56,7 @@ const initiateCashfreePayment = async (amount) => {
 const verifyPaymentStatus = async (orderId) => {
   try {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`http://192.168.1.2:5000/api/payment/verify/${orderId}`, {
+    const response = await fetch(API_BASE_URL+`/payment/verify/${orderId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
 

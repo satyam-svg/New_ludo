@@ -17,12 +17,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Add this import
+import config from '../../config';
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'http://192.168.1.2:5000/api/users';
+const API_BASE_URL = `${config.BASE_URL}/api/users`;
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [phoneNumber, setphoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -54,10 +55,6 @@ export default function LoginScreen() {
   }, []);
 
   const validateForm = () => {
-    if (!email.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return false;
-    }
 
     if (password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
@@ -86,7 +83,7 @@ export default function LoginScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          email, 
+          phoneNumber, 
           password
         }),
       });
@@ -97,7 +94,7 @@ export default function LoginScreen() {
         throw new Error(data.message || 'Failed to send OTP');
       }
       
-      Alert.alert('OTP Sent', 'Check your email for the verification code');
+      Alert.alert('OTP Sent', 'Check Your Whatsapp for the verification code');
       setShowOtpField(true);
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to send OTP');
@@ -123,7 +120,7 @@ export default function LoginScreen() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ phoneNumber, otp }),
       });
 
       const verifyData = await verifyResponse.json();
@@ -156,7 +153,7 @@ export default function LoginScreen() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ phoneNumber, password }),
       });
 
       const data = await response.json();
@@ -240,29 +237,29 @@ export default function LoginScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>
                 {isSignUp 
-                  ? (showOtpField ? 'Verify Your Email' : 'Create Account') 
+                  ? (showOtpField ? 'Verify Your phoneNumber' : 'Create Account') 
                   : 'Welcome Back!'}
               </Text>
               <Text style={styles.cardSubtitle}>
                 {isSignUp 
                   ? (showOtpField 
-                      ? 'Enter the OTP sent to your email' 
+                      ? 'Enter the OTP sent to your phoneNumber' 
                       : 'Sign up to get started') 
                   : 'Sign in to continue playing'}
               </Text>
 
-              {/* Email Input */}
+              {/* phoneNumber Input */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email Address</Text>
+                <Text style={styles.inputLabel}>Mobile Number</Text>
                 <View style={styles.inputContainer}>
-                  <MaterialIcons name="email" size={20} color="#9ca3af" style={styles.inputIcon} />
+                  <MaterialIcons name="smartphone" size={20} color="#9ca3af" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
-                    placeholder="Enter your email"
+                    placeholder="Enter Your Mobile Number"
                     placeholderTextColor="#9ca3af"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
+                    value={phoneNumber}
+                    onChangeText={setphoneNumber}
+                    keyboardType="mobile"
                     autoCapitalize="none"
                     editable={!showOtpField}
                   />
@@ -278,7 +275,7 @@ export default function LoginScreen() {
                       <MaterialIcons name="lock" size={20} color="#9ca3af" style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
-                        placeholder="Enter your password"
+                        placeholder="Enter Your Password"
                         placeholderTextColor="#9ca3af"
                         value={password}
                         onChangeText={setPassword}
@@ -324,7 +321,7 @@ export default function LoginScreen() {
                     />
                   </View>
                   <Text style={styles.otpHint}>
-                    Check your email for the verification code
+                    Check your phoneNumber for the verification code
                   </Text>
                 </View>
               )}

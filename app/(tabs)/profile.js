@@ -16,9 +16,9 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
-
+import config from '../../config';
 const { width } = Dimensions.get('window');
-const API_BASE_URL = 'http://192.168.1.2:5000/api/users';
+const API_BASE_URL = `${config.BASE_URL}/api/users`;
 
 export default function ProfileScreen() {
   const { user, logout, updateWallet } = useAuth();

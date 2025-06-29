@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import config from '../../config';
 
 const { width } = Dimensions.get('window');
 
@@ -83,7 +84,7 @@ export default function HomeScreen() {
             throw new Error('No authentication token found');
           }
           
-          const response = await fetch('http://192.168.1.2:5000/api/users/me', {
+          const response = await fetch(`${config.BASE_URL}/api/users/me`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
