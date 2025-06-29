@@ -11,7 +11,9 @@ import {
   Easing,
   Alert,
   Modal,
-  ActivityIndicator
+  ActivityIndicator,
+  SafeAreaView,
+  ScrollView
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -21,6 +23,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../hooks/useAuth';
 
 const { width, height } = Dimensions.get('window');
+
+// Responsive scaling
+const isSmallDevice = width < 380;
+const isMediumDevice = width >= 380 && width < 414;
+const scale = (size) => {
+  if (isSmallDevice) return size * 0.85;
+  if (isMediumDevice) return size * 0.95;
+  return size;
+};
 
 import config from '../../config';
 const API_BASE_URL = `${config.BASE_URL}/api`;
@@ -180,7 +191,7 @@ export default function LuckyNumberGame() {
               useNativeDriver: true,
             }),
           ]).start();
-        }, index * 50); // Stagger the confetti
+        }, index * 50);
       });
     }
   }, [hasWon]);
@@ -415,24 +426,32 @@ export default function LuckyNumberGame() {
     if (gameState === 'starting') {
       return (
         <View style={styles.loadingContainer}>
-          <MaterialIcons name="stars" size={60} color="#FFD700" />
+          <View style={styles.loadingIconContainer}>
+            <MaterialIcons name="stars" size={scale(60)} color="#FFD700" />
+          </View>
           <Text style={styles.loadingTitle}>Preparing Your Game...</Text>
-          <ActivityIndicator size="large" color="#4ECDC4" style={{ marginTop: 20 }} />
+          <ActivityIndicator size="large" color="#4ECDC4" style={styles.loadingSpinner} />
         </View>
       );
     }
 
     return (
-      <View style={styles.gameContainer}>
-        {/* Game Status */}
-        <View style={styles.gameStatusContainer}>
+      <ScrollView style={styles.gameScrollContainer} showsVerticalScrollIndicator={false}>
+        {/* Game Status Card */}
+        <View style={styles.gameStatusSection}>
           <LinearGradient
-            colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
+            colors={['rgba(255, 255, 255, 0.12)', 'rgba(255, 255, 255, 0.06)']}
             style={styles.gameStatusCard}
           >
-            <View style={styles.statusRow}>
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>🎯 TARGET</Text>
+            <Text style={styles.statusCardTitle}>Game Status</Text>
+            
+            <View style={styles.statusGrid}>
+              {/* Target Number */}
+              <View style={styles.statusGridItem}>
+                <View style={styles.statusIconContainer}>
+                  <Text style={styles.statusIcon}>🎯</Text>
+                </View>
+                <Text style={styles.statusLabel}>Target</Text>
                 <LinearGradient
                   colors={['#FFD700', '#FFA500']}
                   style={styles.targetBadge}
@@ -440,21 +459,25 @@ export default function LuckyNumberGame() {
                   <Text style={styles.targetNumber}>{luckyNumber}</Text>
                 </LinearGradient>
               </View>
-              
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>🎲 ROLLS LEFT</Text>
-                <View style={styles.rollsContainer}>
+
+              {/* Rolls Left */}
+              <View style={styles.statusGridItem}>
+                <View style={styles.statusIconContainer}>
+                  <Text style={styles.statusIcon}>🎲</Text>
+                </View>
+                <Text style={styles.statusLabel}>Rolls Left</Text>
+                <View style={styles.rollsIndicatorContainer}>
                   {[1, 2].map((roll) => (
                     <View
                       key={roll}
                       style={[
-                        styles.rollDot,
-                        rollsLeft >= roll ? styles.rollDotActive : styles.rollDotUsed
+                        styles.rollIndicator,
+                        rollsLeft >= roll ? styles.rollIndicatorActive : styles.rollIndicatorInactive
                       ]}
                     >
                       <MaterialIcons 
                         name="casino" 
-                        size={14} 
+                        size={scale(12)} 
                         color={rollsLeft >= roll ? "#4ECDC4" : "#666"} 
                       />
                     </View>
@@ -462,8 +485,12 @@ export default function LuckyNumberGame() {
                 </View>
               </View>
 
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>💎 WIN</Text>
+              {/* Prize Amount */}
+              <View style={styles.statusGridItem}>
+                <View style={styles.statusIconContainer}>
+                  <Text style={styles.statusIcon}>💎</Text>
+                </View>
+                <Text style={styles.statusLabel}>Prize</Text>
                 <Text style={styles.prizeAmount}>₹{winAmount}</Text>
               </View>
             </View>
@@ -471,142 +498,150 @@ export default function LuckyNumberGame() {
         </View>
 
         {/* Dice Arena */}
-        <View style={styles.diceArena}>
-          <Animated.View style={[
-            styles.diceGlowRing,
-            {
-              opacity: glowAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.2, 0.6]
-              }),
-              transform: [{
-                scale: glowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1, 1.1]
-                })
-              }]
-            }
-          ]} />
-
-          <Animated.View
-            style={[
-              styles.diceContainer,
+        <View style={styles.diceSection}>
+          <View style={styles.diceArena}>
+            {/* Glow Ring */}
+            <Animated.View style={[
+              styles.diceGlowRing,
               {
-                transform: [
-                  { scale: diceScale },
+                opacity: glowAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.15, 0.4]
+                }),
+                transform: [{
+                  scale: glowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.05]
+                  })
+                }]
+              }
+            ]} />
+
+            {/* Dice Container */}
+            <Animated.View
+              style={[
+                styles.diceContainer,
+                {
+                  transform: [
+                    { scale: diceScale },
+                    {
+                      rotate: diceRotation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      }),
+                    },
+                    {
+                      translateY: floatingAnimY.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -8]
+                      })
+                    }
+                  ],
+                },
+              ]}
+            >
+              {/* Win Glow Effect */}
+              {diceValue === parseInt(luckyNumber) && !isRolling && (
+                <Animated.View style={[
+                  styles.winGlow,
                   {
-                    rotate: diceRotation.interpolate({
+                    opacity: glowAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: ['0deg', '360deg'],
-                    }),
-                  },
-                  {
-                    translateY: floatingAnimY.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, -10]
+                      outputRange: [0.3, 0.7]
                     })
                   }
-                ],
-              },
-            ]}
-          >
-            {diceValue === parseInt(luckyNumber) && !isRolling && (
-              <Animated.View style={[
-                styles.winGlow,
-                {
-                  opacity: glowAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.3, 0.8]
-                  })
+                ]} />
+              )}
+              
+              {/* Dice */}
+              <LinearGradient
+                colors={
+                  diceValue === parseInt(luckyNumber) && !isRolling
+                    ? ['#FFD700', '#FFA500', '#FF8C00']
+                    : isRolling
+                    ? ['#8B5CF6', '#A855F7', '#C084FC']
+                    : ['#4ECDC4', '#44A08D', '#2ECC71']
                 }
-              ]} />
-            )}
-            
-            <LinearGradient
-              colors={
-                diceValue === parseInt(luckyNumber) && !isRolling
-                  ? ['#FFD700', '#FFA500', '#FF8C00']
-                  : isRolling
-                  ? ['#8B5CF6', '#A855F7', '#C084FC']
-                  : ['#4ECDC4', '#44A08D', '#2ECC71']
-              }
-              style={styles.dice}
-            >
-              <View style={styles.diceInner}>
-                {isRolling ? (
-                  <>
+                style={styles.dice}
+              >
+                <View style={styles.diceInner}>
+                  {isRolling ? (
+                    <View style={styles.rollingContent}>
+                      <MaterialIcons
+                        name={getDiceIcon(rollingDiceValue)}
+                        size={scale(60)}
+                        color="#fff"
+                        style={styles.diceIcon}
+                      />
+                      <Text style={styles.rollingText}>ROLLING</Text>
+                    </View>
+                  ) : diceValue ? (
                     <MaterialIcons
-                      name={getDiceIcon(rollingDiceValue)}
-                      size={80}
+                      name={getDiceIcon(diceValue)}
+                      size={scale(60)}
                       color="#fff"
                       style={styles.diceIcon}
                     />
-                    <Text style={styles.rollingText}>ROLLING...</Text>
+                  ) : (
+                    <MaterialIcons
+                      name="casino"
+                      size={scale(60)}
+                      color="#fff"
+                      style={styles.diceIcon}
+                    />
+                  )}
+                </View>
+                
+                {/* Sparkles for winning */}
+                {diceValue === parseInt(luckyNumber) && !isRolling && (
+                  <>
+                    <Animated.View style={[
+                      styles.sparkle,
+                      { top: scale(-8), right: scale(8) },
+                      {
+                        opacity: glowAnim,
+                        transform: [{
+                          rotate: glowAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0deg', '360deg']
+                          })
+                        }]
+                      }
+                    ]}>
+                      <Text style={styles.sparkleText}>✨</Text>
+                    </Animated.View>
+                    <Animated.View style={[
+                      styles.sparkle,
+                      { bottom: scale(-4), left: scale(8) },
+                      {
+                        opacity: glowAnim,
+                        transform: [{
+                          rotate: glowAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['180deg', '540deg']
+                          })
+                        }]
+                      }
+                    ]}>
+                      <Text style={styles.sparkleText}>⭐</Text>
+                    </Animated.View>
                   </>
-                ) : diceValue ? (
-                  <MaterialIcons
-                    name={getDiceIcon(diceValue)}
-                    size={80}
-                    color="#fff"
-                    style={styles.diceIcon}
-                  />
-                ) : (
-                  <MaterialIcons
-                    name="casino"
-                    size={80}
-                    color="#fff"
-                    style={styles.diceIcon}
-                  />
                 )}
-              </View>
-              
-              {/* Sparkles for winning */}
-              {diceValue === parseInt(luckyNumber) && !isRolling && (
-                <>
-                  <Animated.View style={[
-                    styles.sparkle,
-                    { top: -10, right: 10 },
-                    {
-                      opacity: glowAnim,
-                      transform: [{
-                        rotate: glowAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0deg', '360deg']
-                        })
-                      }]
-                    }
-                  ]}>
-                    <Text style={styles.sparkleText}>✨</Text>
-                  </Animated.View>
-                  <Animated.View style={[
-                    styles.sparkle,
-                    { bottom: -5, left: 10 },
-                    {
-                      opacity: glowAnim,
-                      transform: [{
-                        rotate: glowAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['180deg', '540deg']
-                        })
-                      }]
-                    }
-                  ]}>
-                    <Text style={styles.sparkleText}>⭐</Text>
-                  </Animated.View>
-                </>
-              )}
-            </LinearGradient>
-          </Animated.View>
+              </LinearGradient>
+            </Animated.View>
+
+            {/* Result Message */}
+          </View>
         </View>
 
         {/* Roll History */}
         {rollHistory.length > 0 && (
-          <View style={styles.historyContainer}>
+          <View style={styles.historySection}>
             <LinearGradient
               colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
               style={styles.historyCard}
             >
-              <Text style={styles.historyTitle}>🎲 Your Journey</Text>
+              <Text style={styles.historyTitle}>🎲 Your Rolls</Text>
               <View style={styles.historyTrail}>
                 {rollHistory.map((roll, index) => (
                   <React.Fragment key={index}>
@@ -629,7 +664,7 @@ export default function LuckyNumberGame() {
                       )}
                     </View>
                     {index < rollHistory.length - 1 && (
-                      <MaterialIcons name="arrow-forward" size={16} color="#666" />
+                      <MaterialIcons name="arrow-forward" size={scale(14)} color="#666" />
                     )}
                   </React.Fragment>
                 ))}
@@ -637,7 +672,7 @@ export default function LuckyNumberGame() {
             </LinearGradient>
           </View>
         )}
-      </View>
+      </ScrollView>
     );
   };
 
@@ -696,7 +731,7 @@ export default function LuckyNumberGame() {
                   colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.1)']}
                   style={styles.homeButtonGradient}
                 >
-                  <MaterialIcons name="home" size={24} color="#fff" />
+                  <MaterialIcons name="home" size={scale(24)} color="#fff" />
                   <Text style={styles.homeButtonText}>Back to Home</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -712,164 +747,159 @@ export default function LuckyNumberGame() {
       colors={['#0f0c29', '#24243e', '#302b63', '#0f0c29']}
       style={styles.container}
     >
-      {/* Background Elements */}
-      <View style={styles.backgroundElements}>
-        <Animated.View style={[styles.floatingElement, styles.element1]} />
-        <Animated.View style={[styles.floatingElement, styles.element2]} />
-        <Animated.View style={[styles.floatingElement, styles.element3]} />
-      </View>
-
-      {/* Confetti */}
-      {hasWon && confettiParticles.map(particle => (
-        <Animated.View
-          key={particle.id}
-          style={[
-            styles.confetti,
-            {
-              backgroundColor: particle.color,
-              transform: [
-                { translateX: particle.translateX },
-                { translateY: particle.translateY },
-                { 
-                  rotate: particle.rotation.interpolate({
-                    inputRange: [0, 720],
-                    outputRange: ['0deg', '720deg']
-                  })
-                },
-                { scale: particle.scale }
-              ],
-              opacity: particle.opacity,
-            }
-          ]}
-        />
-      ))}
-
-      {/* Loading Modal for Leave Game */}
-      {isLeavingGame && (
-        <Modal
-          visible={isLeavingGame}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => {}}
-        >
-          <View style={styles.loadingOverlay}>
-            <LinearGradient
-              colors={['rgba(0, 0, 0, 0.8)', 'rgba(26, 26, 46, 0.9)']}
-              style={styles.loadingModalContainer}
-            >
-              <View style={styles.loadingCard}>
-                <LinearGradient
-                  colors={['#1a1a2e', '#16213e', '#0f3460']}
-                  style={styles.loadingCardGradient}
-                >
-                  <View style={styles.exitIconContainer}>
-                    <MaterialIcons name="exit-to-app" size={60} color="#FF6B6B" />
-                  </View>
-                  
-                  <Text style={styles.loadingTitle}>Leaving Game...</Text>
-                  <Text style={styles.loadingSubtitle}>Processing your request</Text>
-                  
-                  <View style={styles.spinnerContainer}>
-                    <ActivityIndicator size="large" color="#FF6B6B" />
-                  </View>
-                  
-                  <View style={styles.warningContainer}>
-                    <MaterialIcons name="warning" size={16} color="#FFA500" />
-                    <Text style={styles.warningText}>Please don't close the app</Text>
-                  </View>
-                </LinearGradient>
-              </View>
-            </LinearGradient>
-          </View>
-        </Modal>
-      )}
-
-      {/* Header */}
-      <Animated.View style={[
-        styles.header,
-        { transform: [{ translateY: slideInAnim }] }
-      ]}>
-        <TouchableOpacity 
-          style={[
-            styles.backButton,
-            isLeavingGame && { opacity: 0.5 }
-          ]} 
-          onPress={handleBackPress}
-          disabled={isLeavingGame}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        
-        <View style={styles.titleContainer}>
-          <Text style={styles.gameTitle}>Lucky Number</Text>
-          <Text style={styles.gameSubtitle}>Roll Your Destiny</Text>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Background Elements */}
+        <View style={styles.backgroundElements}>
+          <Animated.View style={[styles.floatingElement, styles.element1]} />
+          <Animated.View style={[styles.floatingElement, styles.element2]} />
+          <Animated.View style={[styles.floatingElement, styles.element3]} />
         </View>
-        
-        <View style={styles.stakeContainer}>
-          <MaterialIcons name="diamond" size={18} color="#FFD700" />
-          <Text style={styles.stakeText}>₹{stake}</Text>
-        </View>
-      </Animated.View>
 
-      {/* Main Game Area */}
-      <Animated.View style={[
-        styles.gameArea,
-        { transform: [{ translateY: slideInAnim }] }
-      ]}>
-        {renderGameArea()}
-      </Animated.View>
-
-      {/* Roll Button */}
-      {gameState === 'rolling' && rollsLeft > 0 && !showResult && !isFinalizingGame && (
-        <Animated.View style={[
-          styles.actionContainer,
-          { transform: [{ translateY: slideInAnim }] }
-        ]}>
-          <TouchableOpacity
+        {/* Confetti */}
+        {hasWon && confettiParticles.map(particle => (
+          <Animated.View
+            key={particle.id}
             style={[
-              styles.rollButton,
-              (isRolling || isFinalizingGame || isLeavingGame) && styles.rollButtonDisabled
+              styles.confetti,
+              {
+                backgroundColor: particle.color,
+                transform: [
+                  { translateX: particle.translateX },
+                  { translateY: particle.translateY },
+                  { 
+                    rotate: particle.rotation.interpolate({
+                      inputRange: [0, 720],
+                      outputRange: ['0deg', '720deg']
+                    })
+                  },
+                  { scale: particle.scale }
+                ],
+                opacity: particle.opacity,
+              }
             ]}
-            onPress={rollDice}
-            disabled={isRolling || isFinalizingGame || isLeavingGame}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#4ECDC4', '#44A08D', '#2ECC71']}
-              style={styles.rollButtonGradient}
-            >
-              <View style={styles.rollButtonContent}>
-                <MaterialIcons 
-                  name={isRolling ? "autorenew" : "casino"} 
-                  size={32} 
-                  color="#fff" 
-                />
-                <View style={styles.rollButtonTextContainer}>
-                  <Text style={styles.rollButtonText}>
-                    {isRolling ? 'ROLLING...' : 
-                     isFinalizingGame ? 'FINALIZING...' : 
-                     'ROLL DICE'}
-                  </Text>
-                  <Text style={styles.rollButtonSubtext}>
-                    {isRolling ? 'Good luck! 🤞' : 
-                     isFinalizingGame ? 'Updating wallet...' :
-                     `${rollsLeft} chance${rollsLeft > 1 ? 's' : ''} left`}
-                  </Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+          />
+        ))}
 
-      {/* Result Modal */}
-      {renderResult()}
+        {/* Loading Modal for Leave Game */}
+        {isLeavingGame && (
+          <Modal
+            visible={isLeavingGame}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => {}}
+          >
+            <View style={styles.loadingOverlay}>
+              <LinearGradient
+                colors={['rgba(0, 0, 0, 0.8)', 'rgba(26, 26, 46, 0.9)']}
+                style={styles.loadingModalContainer}
+              >
+                <View style={styles.loadingCard}>
+                  <LinearGradient
+                    colors={['#1a1a2e', '#16213e', '#0f3460']}
+                    style={styles.loadingCardGradient}
+                  >
+                    <View style={styles.exitIconContainer}>
+                      <MaterialIcons name="exit-to-app" size={scale(50)} color="#FF6B6B" />
+                    </View>
+                    
+                    <Text style={styles.loadingTitle}>Leaving Game...</Text>
+                    <Text style={styles.loadingSubtitle}>Processing your request</Text>
+                    
+                    <View style={styles.spinnerContainer}>
+                      <ActivityIndicator size="large" color="#FF6B6B" />
+                    </View>
+                    
+                    <View style={styles.warningContainer}>
+                      <MaterialIcons name="warning" size={scale(14)} color="#FFA500" />
+                      <Text style={styles.warningText}>Please don't close the app</Text>
+                    </View>
+                  </LinearGradient>
+                </View>
+              </LinearGradient>
+            </View>
+          </Modal>
+        )}
+
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={[
+              styles.backButton,
+              isLeavingGame && { opacity: 0.5 }
+            ]} 
+            onPress={handleBackPress}
+            disabled={isLeavingGame}
+          >
+            <MaterialIcons name="arrow-back" size={scale(20)} color="#fff" />
+          </TouchableOpacity>
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.gameTitle}>Lucky Number</Text>
+          </View>
+          
+          <View style={styles.stakeContainer}>
+            <MaterialIcons name="diamond" size={scale(16)} color="#FFD700" />
+            <Text style={styles.stakeText}>₹{stake}</Text>
+          </View>
+        </View>
+
+        {/* Main Game Area */}
+        <View style={styles.gameArea}>
+          {renderGameArea()}
+        </View>
+
+        {/* Roll Button */}
+        {gameState === 'rolling' && rollsLeft > 0 && !showResult && !isFinalizingGame && (
+          <View style={styles.actionContainer}>
+            <TouchableOpacity
+              style={[
+                styles.rollButton,
+                (isRolling || isFinalizingGame || isLeavingGame) && styles.rollButtonDisabled
+              ]}
+              onPress={rollDice}
+              disabled={isRolling || isFinalizingGame || isLeavingGame}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#4ECDC4', '#44A08D', '#2ECC71']}
+                style={styles.rollButtonGradient}
+              >
+                <View style={styles.rollButtonContent}>
+                  <MaterialIcons 
+                    name={isRolling ? "autorenew" : "casino"} 
+                    size={scale(28)} 
+                    color="#fff" 
+                  />
+                  <View style={styles.rollButtonTextContainer}>
+                    <Text style={styles.rollButtonText}>
+                      {isRolling ? 'ROLLING...' : 
+                       isFinalizingGame ? 'FINALIZING...' : 
+                       'ROLL DICE'}
+                    </Text>
+                    <Text style={styles.rollButtonSubtext}>
+                      {isRolling ? 'Good luck! 🤞' : 
+                       isFinalizingGame ? 'Updating wallet...' :
+                       `${rollsLeft} chance${rollsLeft > 1 ? 's' : ''} left`}
+                    </Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Result Modal */}
+        {renderResult()}
+      </SafeAreaView>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  safeArea: {
     flex: 1,
   },
   backgroundElements: {
@@ -885,45 +915,46 @@ const styles = StyleSheet.create({
     opacity: 0.03,
   },
   element1: {
-    width: 200,
-    height: 200,
+    width: scale(180),
+    height: scale(180),
     backgroundColor: '#4ECDC4',
-    top: 100,
-    left: -50,
+    top: scale(80),
+    left: scale(-40),
   },
   element2: {
-    width: 150,
-    height: 150,
+    width: scale(130),
+    height: scale(130),
     backgroundColor: '#FFD700',
-    top: 400,
-    right: -30,
+    top: scale(300),
+    right: scale(-25),
   },
   element3: {
-    width: 180,
-    height: 180,
+    width: scale(160),
+    height: scale(160),
     backgroundColor: '#8B5CF6',
-    bottom: 200,
-    left: -40,
+    bottom: scale(150),
+    left: scale(-30),
   },
   confetti: {
     position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: scale(6),
+    height: scale(6),
+    borderRadius: scale(3),
     left: '50%',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingHorizontal: scale(20),
+    paddingTop: scale(10),
+    paddingBottom: scale(15),
+    minHeight: scale(60),
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -931,8 +962,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   titleContainer: {
+    marginTop:50,
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: scale(10),
   },
   gameTitle: {
     fontSize: 28,
@@ -944,138 +977,163 @@ const styles = StyleSheet.create({
     textShadowRadius: 10,
     letterSpacing: 1,
   },
-  gameSubtitle: {
-    fontSize: 14,
-    color: '#4ECDC4',
-    textAlign: 'center',
-    marginTop: 4,
-    fontWeight: '600',
-    opacity: 0.9,
-  },
   stakeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: scale(10),
+    paddingVertical: scale(6),
+    borderRadius: scale(15),
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.3)',
+    minWidth: scale(70),
+    justifyContent: 'center',
   },
   stakeText: {
     color: '#FFD700',
     fontWeight: 'bold',
-    fontSize: 14,
-    marginLeft: 4,
+    fontSize: scale(12),
+    marginLeft: scale(3),
   },
   gameArea: {
     flex: 1,
-    paddingHorizontal: 20,
+  },
+  gameScrollContainer: {
+    flex: 1,
+    paddingHorizontal: scale(20),
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: scale(20),
+  },
+  loadingIconContainer: {
+    marginBottom: scale(20),
+    padding: scale(15),
+    borderRadius: scale(40),
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
   },
   loadingTitle: {
-    fontSize: 24,
+    fontSize: scale(20),
     fontWeight: 'bold',
     color: '#fff',
-    marginTop: 20,
     textAlign: 'center',
     textShadowColor: 'rgba(255, 215, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+    marginBottom: scale(10),
   },
-  gameContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  loadingSpinner: {
+    marginTop: scale(20),
   },
-  gameStatusContainer: {
-    marginBottom: 40,
+  gameStatusSection: {
+    marginBottom: scale(25),
   },
   gameStatusCard: {
-    padding: 25,
-    borderRadius: 20,
+    padding: scale(20),
+    borderRadius: scale(20),
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
+    marginTop: scale(10),
   },
-  statusRow: {
+  statusCardTitle: {
+    fontSize: scale(20),
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: scale(15),
+    opacity: 0.9,
+  },
+  statusGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     alignItems: 'center',
   },
-  statusItem: {
-    flex: 1,
+  statusGridItem: {
     alignItems: 'center',
+    flex: 1,
+  },
+  statusIconContainer: {
+    marginBottom: scale(8),
+  },
+  statusIcon: {
+    fontSize: scale(20),
+    textAlign: 'center',
   },
   statusLabel: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 8,
-    letterSpacing: 0.5,
+    fontSize: scale(18),
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: scale(8),
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
   targetBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 3,
     shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   targetNumber: {
-    fontSize: 24,
+    fontSize: scale(18),
     fontWeight: '900',
     color: '#fff',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  rollsContainer: {
+  rollsIndicatorContainer: {
     flexDirection: 'row',
-    gap: 8,
+    gap: scale(6),
   },
-  rollDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  rollIndicator: {
+    width: scale(24),
+    height: scale(24),
+    borderRadius: scale(12),
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
-  rollDotActive: {
+  rollIndicatorActive: {
     backgroundColor: 'rgba(76, 205, 196, 0.2)',
     borderColor: '#4ECDC4',
   },
-  rollDotUsed: {
+  rollIndicatorInactive: {
     backgroundColor: 'rgba(102, 102, 102, 0.2)',
     borderColor: '#666',
   },
   prizeAmount: {
-    fontSize: 18,
+    fontSize: scale(14),
     fontWeight: '900',
     color: '#fff',
     textShadowColor: 'rgba(139, 92, 246, 0.5)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    textShadowRadius: 4,
+  },
+  diceSection: {
+    marginBottom: scale(25),
   },
   diceArena: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 40,
     position: 'relative',
-    minHeight: 250,
+    minHeight: scale(180),
+    paddingVertical: scale(20),
   },
   diceGlowRing: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+    width: scale(140),
+    height: scale(140),
+    borderRadius: scale(70),
     borderWidth: 2,
     borderColor: '#4ECDC4',
     backgroundColor: 'rgba(76, 205, 196, 0.05)',
@@ -1086,30 +1144,30 @@ const styles = StyleSheet.create({
   },
   winGlow: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 25,
+    width: scale(110),
+    height: scale(110),
+    borderRadius: scale(20),
     backgroundColor: 'rgba(255, 215, 0, 0.3)',
-    top: -15,
-    left: -15,
+    top: scale(-5),
+    left: scale(-5),
     zIndex: -1,
   },
   dice: {
-    width: 150,
-    height: 150,
-    borderRadius: 25,
+    width: scale(100),
+    height: scale(100),
+    borderRadius: scale(20),
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 20,
+    elevation: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
-    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
   diceInner: {
-    width: '90%',
-    height: '90%',
-    borderRadius: 20,
+    width: '88%',
+    height: '88%',
+    borderRadius: scale(16),
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -1118,104 +1176,116 @@ const styles = StyleSheet.create({
   },
   diceIcon: {
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  rollingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rollingText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: scale(10),
     fontWeight: '900',
-    marginTop: 8,
+    marginTop: scale(4),
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
+    letterSpacing: 0.5,
   },
   sparkle: {
     position: 'absolute',
   },
   sparkleText: {
-    fontSize: 20,
+    fontSize: scale(16),
     textShadowColor: 'rgba(255, 255, 255, 0.8)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 8,
   },
-  resultMessage: {
+  resultMessageContainer: {
     position: 'absolute',
-    bottom: -80,
-    left: -50,
-    right: -50,
+    bottom: scale(-50),
+    left: scale(-60),
+    right: scale(-60),
     alignItems: 'center',
   },
   resultMessageCard: {
-    padding: 15,
-    borderRadius: 15,
+    padding: scale(12),
+    borderRadius: scale(15),
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: scale(200),
   },
   resultMessageText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: scale(13),
+    fontWeight: '700',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
+    lineHeight: scale(16),
   },
-  historyContainer: {
-    marginTop: 20,
+  historySection: {
+    marginBottom: scale(10),
+    // marginTop:100,
   },
   historyCard: {
-    padding: 20,
-    borderRadius: 20,
+    padding: scale(18),
+    
+    borderRadius: scale(18),
+    marginBottom:80,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   historyTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 15,
+    fontSize: scale(18),
+    fontWeight: '800',
+    marginBottom: scale(12),
     textShadowColor: 'rgba(139, 92, 246, 0.5)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 8,
-    letterSpacing: 0.5,
+    textShadowRadius: 6,
+    letterSpacing: 0.3,
   },
   historyTrail: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: scale(8),
+    flexWrap: 'wrap',
   },
   historyDot: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     position: 'relative',
+    marginHorizontal: scale(2),
   },
   historyDotWin: {
     backgroundColor: 'rgba(255, 215, 0, 0.3)',
     borderColor: '#FFD700',
-    borderWidth: 3,
-    elevation: 8,
+    borderWidth: 2.5,
+    elevation: 6,
     shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
   historyDotText: {
-    fontSize: 18,
+    fontSize: scale(16),
     fontWeight: '900',
     color: '#fff',
     textShadowColor: 'rgba(0, 0, 0, 0.6)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   historyDotTextWin: {
     color: '#FFD700',
@@ -1223,24 +1293,25 @@ const styles = StyleSheet.create({
   },
   winCrown: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: scale(-6),
+    right: scale(-6),
   },
   crownText: {
-    fontSize: 16,
+    fontSize: scale(12),
   },
   actionContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: scale(20),
+    paddingBottom: scale(30),
+    paddingTop: scale(10),
   },
   rollButton: {
-    borderRadius: 25,
+    borderRadius: scale(22),
     overflow: 'hidden',
-    elevation: 15,
+    elevation: 12,
     shadowColor: '#4ECDC4',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   rollButtonDisabled: {
     opacity: 0.7,
@@ -1252,26 +1323,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 30,
+    paddingVertical: scale(16),
+    paddingHorizontal: scale(25),
+    minHeight: scale(60),
   },
   rollButtonTextContainer: {
-    marginLeft: 15,
+    marginLeft: scale(12),
     alignItems: 'center',
+    flex: 1,
   },
   rollButtonText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: scale(16),
     fontWeight: 'bold',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
+    textAlign: 'center',
   },
   rollButtonSubtext: {
     color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 12,
+    fontSize: scale(11),
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: scale(2),
+    textAlign: 'center',
   },
   // Result Modal Styles
   resultOverlay: {
@@ -1279,68 +1354,69 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 30,
+    paddingHorizontal: scale(25),
   },
   resultContainer: {
     width: '100%',
-    maxWidth: 350,
-    borderRadius: 30,
+    maxWidth: scale(320),
+    borderRadius: scale(25),
     overflow: 'hidden',
-    elevation: 25,
+    elevation: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.6,
-    shadowRadius: 25,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
   },
   resultCard: {
-    padding: 40,
+    padding: scale(30),
     alignItems: 'center',
   },
   resultHeader: {
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: scale(20),
   },
   resultEmoji: {
-    fontSize: 70,
-    marginBottom: 15,
+    fontSize: scale(50),
+    marginBottom: scale(12),
   },
   resultTitle: {
-    fontSize: 32,
+    fontSize: scale(24),
     fontWeight: '900',
     color: '#fff',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
-    letterSpacing: 1,
+    textShadowRadius: 4,
+    letterSpacing: 0.5,
   },
   resultAmountContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 25,
-    paddingVertical: 12,
-    borderRadius: 20,
-    marginBottom: 25,
+    paddingHorizontal: scale(20),
+    paddingVertical: scale(10),
+    borderRadius: scale(15),
+    marginBottom: scale(20),
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   resultAmount: {
-    fontSize: 40,
+    fontSize: scale(28),
     fontWeight: '900',
     color: '#fff',
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    textShadowRadius: 4,
   },
   resultSubtext: {
-    fontSize: 16,
+    fontSize: scale(14),
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: scale(25),
     opacity: 0.9,
-    lineHeight: 22,
+    lineHeight: scale(18),
+    paddingHorizontal: scale(10),
   },
   homeButton: {
-    borderRadius: 20,
+    borderRadius: scale(18),
     overflow: 'hidden',
     width: '100%',
   },
@@ -1348,14 +1424,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 25,
+    paddingVertical: scale(14),
+    paddingHorizontal: scale(20),
   },
   homeButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 18,
-    marginLeft: 10,
+    fontSize: scale(16),
+    marginLeft: scale(8),
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
@@ -1374,65 +1450,65 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   loadingCard: {
-    width: '85%',
-    maxWidth: 320,
-    borderRadius: 25,
+    width: '80%',
+    maxWidth: scale(280),
+    borderRadius: scale(20),
     overflow: 'hidden',
-    elevation: 20,
+    elevation: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.6,
-    shadowRadius: 25,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
   },
   loadingCardGradient: {
-    padding: 40,
+    padding: scale(30),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 107, 0.3)',
   },
   exitIconContainer: {
-    marginBottom: 20,
-    padding: 15,
-    borderRadius: 50,
+    marginBottom: scale(15),
+    padding: scale(12),
+    borderRadius: scale(40),
     backgroundColor: 'rgba(255, 107, 107, 0.1)',
     borderWidth: 2,
     borderColor: 'rgba(255, 107, 107, 0.3)',
   },
   loadingTitle: {
-    fontSize: 24,
+    fontSize: scale(18),
     fontWeight: '900',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: scale(6),
     textAlign: 'center',
     textShadowColor: 'rgba(255, 107, 107, 0.5)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 8,
   },
   loadingSubtitle: {
-    fontSize: 16,
+    fontSize: scale(13),
     color: '#888',
-    marginBottom: 30,
+    marginBottom: scale(20),
     textAlign: 'center',
     fontWeight: '500',
   },
   spinnerContainer: {
-    marginBottom: 25,
-    padding: 10,
+    marginBottom: scale(20),
+    padding: scale(8),
   },
   warningContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 165, 0, 0.1)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 15,
+    paddingHorizontal: scale(12),
+    paddingVertical: scale(6),
+    borderRadius: scale(12),
     borderWidth: 1,
     borderColor: 'rgba(255, 165, 0, 0.3)',
   },
   warningText: {
-    fontSize: 12,
+    fontSize: scale(10),
     color: '#FFA500',
-    marginLeft: 6,
+    marginLeft: scale(4),
     fontWeight: '600',
   },
 });

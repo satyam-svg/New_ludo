@@ -115,18 +115,7 @@ export default function LuckyNumberLobby() {
     try {
       // Start timing for minimum 5 seconds
       const startTime = Date.now();
-      const minLoadingTime = 3000; // 5 seconds minimum
-      
-      // Simulate API call or actual API call here
-      const apiResponse = new Promise(resolve => {
-        // Simulate API call delay (replace with actual API call)
-        setTimeout(() => {
-          resolve({ success: true });
-        }, Math.random() * 1000 + 500); // Random delay between 500ms-1500ms
-      });
-      
-      // Wait for API response
-      await apiResponse;
+      const minLoadingTime = 0; // 5 seconds minimum
       
       // Calculate remaining time to ensure minimum 5 seconds
       const elapsedTime = Date.now() - startTime;
@@ -250,7 +239,7 @@ export default function LuckyNumberLobby() {
         
         <View style={styles.titleContainer}>
           <Text style={styles.gameTitle}>Lucky Number</Text>
-          <Text style={styles.gameSubtitle}>Choose Your Destiny</Text>
+          {/* <Text style={styles.gameSubtitle}>Choose Your Destiny</Text> */}
         </View>
         
         <View style={styles.stakeContainer}>
@@ -278,9 +267,9 @@ export default function LuckyNumberLobby() {
               colors={['rgba(255, 215, 0, 0.1)', 'rgba(255, 165, 0, 0.05)']}
               style={styles.heroCard}
             >
-              <View style={styles.heroIconContainer}>
-                <MaterialIcons name="stars" size={60} color="#FFD700" />
-              </View>
+              {/* <View style={styles.heroIconContainer}> */}
+                {/* <MaterialIcons name="stars" size={10} color="#FFD700" /> */}
+              {/* </View> */}
               <Text style={styles.heroTitle}>🎯 Choose Your Lucky Number!</Text>
               <Text style={styles.heroDescription}>
                 Pick the number that speaks to your soul.{'\n'}
@@ -291,7 +280,7 @@ export default function LuckyNumberLobby() {
 
           {/* Number Selection Grid */}
           <View style={styles.numbersSection}>
-            <Text style={styles.sectionTitle}>Select Your Number</Text>
+            {/* <Text style={styles.sectionTitle}>Select Your Number</Text> */}
             <View style={styles.numbersGrid}>
               {[1, 2, 3, 4, 5, 6].map(number => renderNumberButton(number))}
             </View>
@@ -409,7 +398,7 @@ export default function LuckyNumberLobby() {
       </ScrollView>
 
       {/* Loading Modal */}
-      <Modal
+      {/* <Modal
         visible={showLoadingModal}
         transparent={true}
         animationType="none"
@@ -490,7 +479,7 @@ export default function LuckyNumberLobby() {
             </LinearGradient>
           </Animated.View>
         </LinearGradient>
-      </Modal>
+      </Modal> */}
     </LinearGradient>
   );
 }
