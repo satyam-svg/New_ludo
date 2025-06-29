@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,24 @@ import {
   Animated,
   Dimensions,
   ScrollView,
+  BackHandler,
+  Modal,
+  ActivityIndicator
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
+import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Line, Rect } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
 const BOARD_SIZE = 10;
 const CELL_SIZE = (width - 40) / BOARD_SIZE;
+
+import config from '../../config';
+const API_BASE_URL = `${config.BASE_URL}/api`;
 
 // Snake and Ladder positions - 22 snakes total (7 in each 30 range)
 const SNAKES = {
@@ -30,7 +40,8 @@ const SNAKES = {
   30: 1,
   
   // Second 30 cells (31-60) - 7 snakes
-  47: 1,
+  34: 1,
+  46: 1,
   49: 1,
   56: 1,
   54: 1,
@@ -59,15 +70,19 @@ const LADDERS = {
   // Mid-lower section (26-50) - 3 ladders
   28: 44,
   32: 51,
+  33: 88,
+  35: 55,
   42: 63,
   
   // Mid-upper section (51-75) - 3 ladders
   57: 76,
+  59: 99,
   62: 81,
   71: 90,
   37: 45,
-  66: 74,
+  66: 85,
   64: 77,
+  67: 86,
   78: 82
   
   // Upper section (76-95) - 0 ladders (too close to finish)
@@ -185,12 +200,21 @@ function generateBoard() {
 
 export default function SnakeGameScreen() {
   const params = useLocalSearchParams();
-  const router = useRouter();
   const { user, updateWallet } = useAuth();
   
   // Parse parameters
-  const mode = params.mode ? JSON.parse(params.mode) : {};
+  const mode = params.mode1 ? JSON.parse(params.mode1) : {};
   const stake = parseInt(params.stake) || 0;
+  
+  // Backend Integration States
+  const [gameState, setGameState] = useState('starting'); // starting, playing, finished
+  const [gameId, setGameId] = useState(null);
+  const [isStartingGame, setIsStartingGame] = useState(false);
+  const [isFinalizingGame, setIsFinalizingGame] = useState(false);
+  const [isLeavingGame, setIsLeavingGame] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [winAmount, setWinAmount] = useState(0);
+  const gameIdRef = useRef(null);
   
   // Game state
   const [playerPosition, setPlayerPosition] = useState(0);
@@ -214,10 +238,166 @@ export default function SnakeGameScreen() {
   const [rollAnimation] = useState(new Animated.Value(0));
   const [transferAnimation] = useState(new Animated.Value(0));
   const [pathAnimation] = useState(new Animated.Value(0));
+  const [resultAnim] = useState(new Animated.Value(0));
   const [currentRoll, setCurrentRoll] = useState(0);
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferType, setTransferType] = useState(null); // 'snake' or 'ladder'
   const [activeTransferPath, setActiveTransferPath] = useState(null);
+
+  // API Helper Function
+  const apiCall = async (endpoint, method = 'GET', body = null) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      const config = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      };
+
+      if (body) {
+        config.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'API request failed');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('API Error:', error);
+      throw error;
+    }
+  };
+
+  // Back button handler
+  const handleBackPress = () => {
+    if (isLeavingGame) return true;
+    
+    // If game hasn't started yet, simply go back
+    if (gameState === 'starting' && !gameId) {
+      router.back();
+      return true;
+    }
+    
+    // If game has started, show confirmation alert
+    if (gameId || gameState === 'playing' || gameState === 'finished' || isStartingGame) {
+      Alert.alert(
+        'Leave Game',
+        'Are you sure you want to leave? You will lose your stake.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: () => leave_game() }
+        ]
+      );
+      return true;
+    }
+    
+    router.back();
+    return true;
+  };
+
+  // Device back button handler
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => backHandler.remove();
+  }, [gameState, gameId, isLeavingGame, isStartingGame]);
+
+  // Start game automatically when component mounts
+  useEffect(() => {
+    startGame();
+  }, []);
+
+  const startGame = async () => {
+    try {
+      setIsStartingGame(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const response = await apiCall('/snake-game/start', 'POST', {
+        stake: parseFloat(stake),
+        mode: mode
+      });
+
+      if (response.success) {
+        const newGameId = response.gameId;
+        gameIdRef.current = newGameId; 
+        setGameId(newGameId);
+        setGameState('playing');
+        setWinAmount(response.winAmount);
+        setCurrentRoll(0);
+        setPlayerPosition(0);
+        setGameStatus('playing');
+        setMoveHistory([]);
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert('Error', 'Failed to start game');
+        router.back();
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to start game');
+      console.error('Error starting game:', error);
+      router.back();
+    } finally {
+      setIsStartingGame(false);
+    }
+  };
+
+  const leave_game = async () => {
+    try {
+      setIsLeavingGame(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const response = await apiCall('/snake-game/leave_game', 'POST', {
+        gameId: gameIdRef.current
+      });
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/");
+      
+    } catch (error) {
+      setIsLeavingGame(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', error.message || 'Failed to leave game');
+      console.error('Error leaving game:', error);
+    }
+  };
+
+  const finalizeGame = async (gameResult) => {
+    try {
+      setIsFinalizingGame(true);
+
+      const response = await apiCall('/snake-game/finalize', 'POST', {
+        gameId: gameIdRef.current,
+        result: gameResult
+      });
+
+      if (response.success) {
+        // Update wallet from backend response
+        await updateWallet(response.newBalance);
+        
+        Animated.timing(resultAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+
+        setShowResult(true);
+        setGameState('finished');
+      } else {
+        Alert.alert('Error', 'Failed to finalize game');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to finalize game');
+      console.error('Error finalizing game:', error);
+    } finally {
+      setIsFinalizingGame(false);
+    }
+  };
 
   const animateTransfer = (type, callback) => {
     setIsTransferring(true);
@@ -255,7 +435,7 @@ export default function SnakeGameScreen() {
   };
 
   const goToHomePage = () => {
-    router.push('/'); // Adjust path to your home page
+    router.replace('/');
   };
 
   // Generate board numbers (1 to 100, starting from bottom left)
@@ -296,148 +476,178 @@ export default function SnakeGameScreen() {
     moveOneStep();
   };
 
-  const rollDice = () => {
-    if (isRolling || gameStatus !== 'playing') return;
+  const rollDice = async () => {
+    if (isRolling || gameStatus !== 'playing' || gameState !== 'playing' || !gameId) return;
 
-    setIsRolling(true);
-    setCurrentRoll(currentRoll + 1);
-    
-    // Animate dice
-    Animated.sequence([
-      Animated.timing(rollAnimation, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(rollAnimation, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    try {
+      setIsRolling(true);
+      setCurrentRoll(currentRoll + 1);
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      // Animate dice
+      Animated.sequence([
+        Animated.timing(rollAnimation, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rollAnimation, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
 
-    setTimeout(() => {
-      const newDiceValue = Math.floor(Math.random() * 6) + 1;
-      setDiceValue(newDiceValue);
-      
-      let newPosition = playerPosition + newDiceValue;
-      
-      // Check if player reaches or exceeds 100
-      if (newPosition >= 100) {
-        newPosition = 100;
-        
-        // Animate step by step to 100
-        animateStepByStepMovement(playerPosition, newPosition - playerPosition, () => {
-          setGameStatus('won');
-          
-          // Win logic
-          const winAmount = stake * mode.multiplier;
-          updateWallet(user.wallet + winAmount - stake);
-          
-          setTimeout(() => {
-            Alert.alert(
-              '🎉 Congratulations!',
-              `You reached 100!\nYou won ₹${winAmount.toFixed(1)}!`,
-              [
-                { text: 'Home', onPress: goToHomePage },
-                { text: 'Play Again', onPress: () => router.back() }
-              ]
-            );
-          }, 1000);
-          
-          setIsRolling(false);
-        });
+      // Call backend to roll dice
+      const response = await apiCall('/snake-game/roll', 'POST', {
+        gameId: gameIdRef.current,
+        currentPosition: playerPosition,
+        rollNumber: currentRoll + 1
+      });
+
+      if (!response.success) {
+        Alert.alert('Error', 'Failed to roll dice');
+        setIsRolling(false);
         return;
       }
-      
-      // Check for snakes
-      if (SNAKES[newPosition]) {
-        const snakeEnd = SNAKES[newPosition];
-        setMoveHistory(prev => [...prev, {
-          roll: currentRoll + 1,
-          dice: newDiceValue,
-          from: playerPosition,
-          to: newPosition,
-          snake: snakeEnd,
-          type: 'snake'
-        }]);
+
+      setTimeout(() => {
+        const newDiceValue = response.diceValue;
+        setDiceValue(newDiceValue);
         
-        // Move step by step to snake position, then animate transfer
-        animateStepByStepMovement(playerPosition, newDiceValue, () => {
-          animateTransfer('snake', () => {
-            setPlayerPosition(snakeEnd);
-            
-            // Snake bite = immediate game over
-            setGameStatus('lost');
-            updateWallet(user.wallet - stake);
-            
-            setTimeout(() => {
-              Alert.alert(
-                '🐍 Snake Bite!',
-                `You were bitten by a snake!\nGame Over!\nYou lost ₹${stake}`,
-                [
-                  { text: 'Home', onPress: goToHomePage },
-                  { text: 'Try Again', onPress: () => router.back() }
-                ]
-              );
-            }, 500);
-            
-            setIsRolling(false);
-          });
-        });
-      }
-      // Check for ladders
-      else if (LADDERS[newPosition]) {
-        const ladderEnd = LADDERS[newPosition];
-        setMoveHistory(prev => [...prev, {
-          roll: currentRoll + 1,
-          dice: newDiceValue,
-          from: playerPosition,
-          to: newPosition,
-          ladder: ladderEnd,
-          type: 'ladder'
-        }]);
+        let newPosition = playerPosition + newDiceValue;
         
-        // Move step by step to ladder position, then animate transfer
-        animateStepByStepMovement(playerPosition, newDiceValue, () => {
-          animateTransfer('ladder', () => {
-            setPlayerPosition(ladderEnd);
-            setIsRolling(false);
-          });
-        });
-      }
-      // Normal move
-      else {
-        setMoveHistory(prev => [...prev, {
-          roll: currentRoll + 1,
-          dice: newDiceValue,
-          from: playerPosition,
-          to: newPosition,
-          type: 'normal'
-        }]);
-        
-        // Move step by step for normal moves
-        animateStepByStepMovement(playerPosition, newDiceValue, () => {
-          // Check if max rolls reached without winning
-          if (currentRoll + 1 >= mode.rolls && newPosition < 100) {
-            setGameStatus('lost');
-            updateWallet(user.wallet - stake);
-            setTimeout(() => {
-              Alert.alert(
-                '⏰ Time Up!',
-                `You didn't reach 100 in ${mode.rolls} rolls!\nYou lost ₹${stake}`,
-                [
-                  { text: 'Home', onPress: goToHomePage },
-                  { text: 'Try Again', onPress: () => router.back() }
-                ]
-              );
-            }, 1500);
-          }
+        // Check if player reaches or exceeds 100 - INSTANT WIN
+        if (newPosition >= 100) {
+          newPosition = 100;
           
-          setIsRolling(false);
-        });
-      }
-    }, 900);
+          // Animate step by step to 100
+          animateStepByStepMovement(playerPosition, newPosition - playerPosition, () => {
+            setGameStatus('won');
+            
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            
+            setTimeout(() => {
+              finalizeGame({
+                result: 'won',
+                reason: 'reached_finish',
+                finalPosition: 100,
+                rollsUsed: currentRoll + 1
+              });
+            }, 1000);
+            
+            setIsRolling(false);
+          });
+          return;
+        }
+        
+        // Check for snakes - IMMEDIATE LOSS
+        if (SNAKES[newPosition]) {
+          const snakeEnd = SNAKES[newPosition];
+          setMoveHistory(prev => [...prev, {
+            roll: currentRoll + 1,
+            dice: newDiceValue,
+            from: playerPosition,
+            to: newPosition,
+            snake: snakeEnd,
+            type: 'snake'
+          }]);
+          
+          // Move step by step to snake position, then animate transfer
+          animateStepByStepMovement(playerPosition, newDiceValue, () => {
+            animateTransfer('snake', () => {
+              setPlayerPosition(snakeEnd);
+              
+              // Snake bite = immediate game over
+              setGameStatus('lost');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              
+              setTimeout(() => {
+                finalizeGame({
+                  result: 'lost',
+                  reason: 'snake_bite',
+                  finalPosition: snakeEnd,
+                  rollsUsed: currentRoll + 1
+                });
+              }, 500);
+              
+              setIsRolling(false);
+            });
+          });
+        }
+        // Check for ladders
+        else if (LADDERS[newPosition]) {
+          const ladderEnd = LADDERS[newPosition];
+          setMoveHistory(prev => [...prev, {
+            roll: currentRoll + 1,
+            dice: newDiceValue,
+            from: playerPosition,
+            to: newPosition,
+            ladder: ladderEnd,
+            type: 'ladder'
+          }]);
+          
+          // Move step by step to ladder position, then animate transfer
+          animateStepByStepMovement(playerPosition, newDiceValue, () => {
+            animateTransfer('ladder', () => {
+              setPlayerPosition(ladderEnd);
+              
+              // After ladder, check if we reached 100 - INSTANT WIN
+              if (ladderEnd >= 100) {
+                setGameStatus('won');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                
+                setTimeout(() => {
+                  finalizeGame({
+                    result: 'won',
+                    reason: 'reached_finish',
+                    finalPosition: 100,
+                    rollsUsed: currentRoll + 1
+                  });
+                }, 1000);
+              }
+              
+              setIsRolling(false);
+            });
+          });
+        }
+        // Normal move
+        else {
+          setMoveHistory(prev => [...prev, {
+            roll: currentRoll + 1,
+            dice: newDiceValue,
+            from: playerPosition,
+            to: newPosition,
+            type: 'normal'
+          }]);
+          
+          // Move step by step for normal moves
+          animateStepByStepMovement(playerPosition, newDiceValue, () => {
+            // Check if max rolls reached - SURVIVAL WIN if no snake bite
+            if (currentRoll + 1 >= mode.rolls) {
+              setGameStatus('won'); // CHANGED: Now this is a WIN, not a loss
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              
+              setTimeout(() => {
+                finalizeGame({
+                  result: 'won',
+                  reason: 'survived_all_rolls',
+                  finalPosition: newPosition,
+                  rollsUsed: currentRoll + 1
+                });
+              }, 1500);
+            }
+            
+            setIsRolling(false);
+          });
+        }
+      }, 900);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to roll dice');
+      console.error('Error rolling dice:', error);
+      setIsRolling(false);
+    }
   };
 
   const getCellPosition = (number) => {
@@ -502,13 +712,173 @@ export default function SnakeGameScreen() {
     outputRange: [1, 1.3, 1],
   });
 
+  // Render result modal similar to Lucky Number game
+  const renderResult = () => {
+    return (
+      <Modal
+        visible={showResult}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.resultOverlay}>
+          <LinearGradient
+            colors={['rgba(0, 0, 0, 0.8)', 'rgba(26, 26, 46, 0.9)']}
+            style={styles.resultModalContainer}
+          >
+            <Animated.View style={[
+              styles.resultCard,
+              { opacity: resultAnim }
+            ]}>
+              <LinearGradient
+                colors={gameStatus === 'won' ? ['#4ECDC4', '#44A08D', '#2ECC71'] : ['#FF6B6B', '#FF8E53', '#FF6B35']}
+                style={styles.resultCardGradient}
+              >
+                <View style={styles.resultHeader}>
+                  <Text style={styles.resultEmoji}>
+                    {gameStatus === 'won' ? '🎉' : '😔'}
+                  </Text>
+                  <Text style={styles.resultTitle}>
+                    {gameStatus === 'won' ? 'VICTORY!' : 'GAME OVER!'}
+                  </Text>
+                </View>
+                
+                <View style={styles.resultAmountContainer}>
+                  <Text style={styles.resultAmount}>
+                    {gameStatus === 'won' ? `+₹${winAmount}` : `-₹${stake}`}
+                  </Text>
+                </View>
+                
+                <Text style={styles.resultSubtext}>
+                  {gameStatus === 'won' 
+                    ? playerPosition >= 100
+                      ? `You reached position 100 in ${currentRoll} rolls! 🎯` 
+                      : `You survived ${mode.rolls} rolls without snake bite! 🛡️`
+                    : moveHistory[moveHistory.length - 1]?.type === 'snake'
+                    ? `Snake bite at position ${playerPosition}! 🐍`
+                    : `Unexpected game end at position ${playerPosition}! ⚠️`
+                  }
+                </Text>
+                
+                <View style={styles.resultButtons}>
+                  <TouchableOpacity 
+                    style={styles.exitButton}
+                    onPress={goToHomePage}
+                  >
+                    <View style={styles.exitButtonInner}>
+                      <MaterialIcons name="home" size={20} color="#fff" />
+                      <Text style={styles.exitText}>Home</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </Animated.View>
+          </LinearGradient>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Loading modal for starting game
+  if (gameState === 'starting') {
+    return (
+      <View style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['rgba(20, 13, 38, 0.88)', 'rgba(26, 26, 46, 0.9)']}
+          style={styles.loadingModalContainer}
+        >
+          <View style={styles.loadingCard}>
+            <LinearGradient
+              colors={['#1a1a2e', '#16213e', '#0f3460']}
+              style={styles.loadingCardGradient}
+            >
+              <View style={styles.startIconContainer}>
+                <Text style={styles.snakeEmoji}>🐍</Text>
+              </View>
+              
+              <Text style={styles.loadingTitle}>Starting Snake Game...</Text>
+              <Text style={styles.loadingSubtitle}>Setting up your adventure</Text>
+              
+              <View style={styles.spinnerContainer}>
+                <ActivityIndicator 
+                  size="large" 
+                  color="#4ECDC4" 
+                  style={styles.loadingSpinner}
+                />
+              </View>
+              
+              <View style={styles.warningContainer}>
+                <MaterialIcons name="info" size={16} color="#4ECDC4" />
+                <Text style={styles.warningText}>Stake: ₹{stake} • Mode: {mode.name}</Text>
+              </View>
+            </LinearGradient>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
+        {/* Loading Modal for Leave Game */}
+        {isLeavingGame && (
+          <Modal
+            visible={isLeavingGame}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => {}}
+          >
+            <View style={styles.loadingOverlay}>
+              <LinearGradient
+                colors={['rgba(0, 0, 0, 0.8)', 'rgba(26, 26, 46, 0.9)']}
+                style={styles.loadingModalContainer}
+              >
+                <View style={styles.loadingCard}>
+                  <LinearGradient
+                    colors={['#1a1a2e', '#16213e', '#0f3460']}
+                    style={styles.loadingCardGradient}
+                  >
+                    <View style={styles.exitIconContainer}>
+                      <MaterialIcons name="exit-to-app" size={60} color="#FF6B6B" />
+                    </View>
+                    
+                    <Text style={styles.loadingTitle}>Leaving Game...</Text>
+                    <Text style={styles.loadingSubtitle}>Processing your request</Text>
+                    
+                    <View style={styles.spinnerContainer}>
+                      <ActivityIndicator 
+                        size="large" 
+                        color="#FF6B6B" 
+                        style={styles.loadingSpinner}
+                      />
+                    </View>
+                    
+                    <View style={styles.warningContainer}>
+                      <MaterialIcons name="warning" size={16} color="#FFA500" />
+                      <Text style={styles.warningText}>Please don't close the app</Text>
+                    </View>
+                  </LinearGradient>
+                </View>
+              </LinearGradient>
+            </View>
+          </Modal>
+        )}
+
+        {/* Result Modal */}
+        {renderResult()}
+
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backText}>← Back</Text>
+          <TouchableOpacity 
+            style={[
+              styles.backButton,
+              isLeavingGame && { opacity: 0.5 }
+            ]} 
+            onPress={handleBackPress}
+            disabled={isLeavingGame}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={styles.gameTitle}>Snake & Ladder</Text>
@@ -636,17 +1006,18 @@ export default function SnakeGameScreen() {
             style={[
               styles.rollButton,
               {
-                backgroundColor: isRolling ? '#666' : 
+                backgroundColor: isRolling || isFinalizingGame || isLeavingGame ? '#666' : 
                   gameStatus === 'won' ? '#00D4AA' :
                   gameStatus === 'lost' ? '#FF4757' : '#7C3AED'
               }
             ]}
             onPress={rollDice}
-            disabled={isRolling || gameStatus !== 'playing' || isTransferring}
+            disabled={isRolling || gameStatus !== 'playing' || isTransferring || isFinalizingGame || isLeavingGame}
           >
             <Text style={styles.rollButtonText}>
               {isRolling ? 'Rolling...' : 
                isTransferring ? (transferType === 'snake' ? '🐍 Snake Bite!' : '🪜 Climbing...') :
+               isFinalizingGame ? 'Finalizing...' :
                gameStatus === 'won' ? '🎉 You Won!' :
                gameStatus === 'lost' ? '💀 Game Over' : '🎲 Roll Dice'}
             </Text>
@@ -679,6 +1050,211 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  
+  // Loading styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  loadingModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  loadingCard: {
+    width: '85%',
+    maxWidth: 320,
+    borderRadius: 25,
+    overflow: 'hidden',
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.6,
+    shadowRadius: 25,
+  },
+  loadingCardGradient: {
+    padding: 40,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(76, 205, 196, 0.3)',
+  },
+  startIconContainer: {
+    marginBottom: 20,
+    padding: 15,
+    borderRadius: 50,
+    backgroundColor: 'rgba(76, 205, 196, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(76, 205, 196, 0.3)',
+  },
+  exitIconContainer: {
+    marginBottom: 20,
+    padding: 15,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  loadingTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+    textShadowColor: 'rgba(76, 205, 196, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 30,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  spinnerContainer: {
+    marginBottom: 25,
+    padding: 10,
+  },
+  loadingSpinner: {
+    transform: [{ scale: 1.2 }],
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 205, 196, 0.1)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 205, 196, 0.3)',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#4ECDC4',
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+
+  // Result modal styles
+  resultOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: width * 0.05,
+  },
+  resultModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  resultCard: {
+    width: '90%',
+    maxWidth: 380,
+    borderRadius: 25,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.6,
+    shadowRadius: 25,
+    elevation: 20,
+  },
+  resultCardGradient: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  resultHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  resultEmoji: {
+    fontSize: 60,
+    marginBottom: 10,
+  },
+  resultTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  resultAmountContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 15,
+    marginBottom: 20,
+  },
+  resultAmount: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  resultSubtext: {
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 25,
+    opacity: 0.9,
+  },
+  resultButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 15,
+  },
+  exitButton: {
+    flex: 1,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  exitButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+  },
+  exitText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  playAgainButton: {
+    flex: 1,
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  resultButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+  },
+  playAgainText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',

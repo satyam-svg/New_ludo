@@ -52,7 +52,7 @@ export function AuthProvider({ children }) {
       if (!response.ok) throw new Error('Failed to fetch user data');
       
       const userData = await response.json();
-      console.log(userData);
+      // console.log(userData);
       return userData;
       
     } catch (error) {

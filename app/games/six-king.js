@@ -32,6 +32,10 @@ const scale = (size) => {
   return size;
 };
 
+// Timer constants
+const ROLL_TIMEOUT_SECONDS = 120; // 1 minute timeout
+const WARNING_THRESHOLD = 20; // Show warning when 15 seconds left
+
 export default function SixKingGame() {
   const { stake, gameId, firstPlayer, players, gameStarted } = useLocalSearchParams();
   const { user, updateWallet } = useAuth();
@@ -48,10 +52,17 @@ export default function SixKingGame() {
   const [rollCount, setRollCount] = useState(0);
   const [isProcessingTurn, setIsProcessingTurn] = useState(false);
   
-  // NEW: Track who is currently rolling
+  // state
+  const [timeLeft, setTimeLeft] = useState(ROLL_TIMEOUT_SECONDS);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
+  const timerRef = useRef(null);
+  const timeoutRef = useRef(null);
+  
+  // Track who is currently rolling
   const [currentRollingPlayer, setCurrentRollingPlayer] = useState(null);
 
-  // NEW: Game end modal state
+  // Game end modal state
   const [showGameEndModal, setShowGameEndModal] = useState(false);
   const [gameEndResult, setGameEndResult] = useState(null); // { isWinner: boolean, amount: number }
 
@@ -79,6 +90,7 @@ export default function SixKingGame() {
     },
     onDisconnect: () => {
       console.log('🔌 Game WebSocket disconnected');
+      clearTimer();
     }
   });
 
@@ -88,6 +100,117 @@ export default function SixKingGame() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
+  const timerPulse = useRef(new Animated.Value(1)).current;
+
+  // Timer functions
+  const startTimer = (playerId) => {
+    console.log(`⏰ Starting timer for player: ${playerId}`);
+    clearTimer(); // Clear any existing timer
+    
+    setTimeLeft(ROLL_TIMEOUT_SECONDS);
+    setIsTimerActive(true);
+    setShowTimeoutWarning(false);
+    
+    // Start countdown
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        const newTime = prev - 1;
+        
+        // Show warning when time is running low
+        if (newTime <= WARNING_THRESHOLD && newTime > 0) {
+          setShowTimeoutWarning(true);
+          // Start timer pulse animation
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(timerPulse, {
+                toValue: 1.2,
+                duration: 500,
+                useNativeDriver: true,
+              }),
+              Animated.timing(timerPulse, {
+                toValue: 1,
+                duration: 500,
+                useNativeDriver: true,
+              }),
+            ])
+          ).start();
+        }
+        
+        // Time up!
+        if (newTime <= 0) {
+          handleTimeUp(playerId);
+          return 0;
+        }
+        
+        return newTime;
+      });
+    }, 1000);
+  };
+
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setIsTimerActive(false);
+    setShowTimeoutWarning(false);
+    setTimeLeft(ROLL_TIMEOUT_SECONDS);
+    timerPulse.setValue(1);
+  };
+
+  const handleTimeUp = (playerId) => {
+      console.log(`⏰ Time up for player: ${playerId}`);
+      clearTimer();
+      
+      const currentPlayerId = user.id || initializePlayerId();
+      const isMyTimeout = String(playerId) === String(currentPlayerId);
+      
+      if (isMyTimeout) {
+        // I timed out - I lose
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setMatchStatus('Time up! You lose...');
+        
+        // Show game end modal FIRST
+        setTimeout(() => {
+          setGameEndResult({
+            isWinner: false,
+            amount: parseInt(stake),
+            stake: parseInt(stake),
+            reason: 'timeout'
+          });
+          setShowGameEndModal(true);
+          setGameState('finished');
+        }, 500);
+        
+      } else {
+        // Opponent timed out - I win
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setMatchStatus('Opponent timed out! You win!');
+        
+        // Show game end modal FIRST (FIXED: Don't send leave_game immediately)
+        setTimeout(() => {
+          setGameEndResult({
+            isWinner: true,
+            amount: parseInt(stake) * 2,
+            stake: parseInt(stake),
+            reason: 'opponent_timeout'
+          });
+          setShowGameEndModal(true);
+          setGameState('finished');
+        }, 500);
+      }
+    };
+
+  // Format timer display
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Check for forwarded messages from lobby
   useEffect(() => {
@@ -155,6 +278,9 @@ export default function SixKingGame() {
           console.log(`👤 Opponent from nav: ${opponent.name} (${opponent.id})`);
         }
         
+        // Start timer for first player
+        startTimer(firstPlayer);
+        
         setMatchStatus('Game Started!');
         setTimeout(() => setMatchStatus(''), 1000);
         
@@ -206,45 +332,48 @@ export default function SixKingGame() {
   function handleDiceRolled(data) {
     const { playerId, diceValue: rolledValue, newSixCount } = data;
     
+    // Clear timer when dice is rolled
+    clearTimer();
+    
     setRollCount(prev => prev + 1);
     
-    // FIXED: Set who is currently rolling based on the playerId who rolled
+    // Set who is currently rolling based on the playerId who rolled
     setCurrentRollingPlayer(playerId);
-    
-    // FIXED: Store the new six count but don't update state immediately
-    // This prevents crown badges from updating before animation completes
     
     // Animate dice roll
     animateDiceRoll(rolledValue, () => {
-      // FIXED: Show six effects IMMEDIATELY after animation completes (before crown update)
+      // Show six effects IMMEDIATELY after animation completes
       if (rolledValue === 6) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       
-      // FIXED: Update six counts AFTER a delay (so six effects show first)
+      // Update six counts AFTER a delay
       setTimeout(() => {
         if (String(playerId) === String(user.id)) {
-          // I rolled the dice, update my sixes AFTER delay
           setPlayerSixes(newSixCount);
         } else {
-          // Opponent rolled the dice, update opponent's sixes AFTER delay
           setOpponentSixes(newSixCount);
         }
-      }, 2000); // Crown badges update 300ms after six effects
+      }, 300);
       
-      // FIXED: Clear rolling state after a longer delay so both players can see the rolling state
+      // Clear rolling state
       setTimeout(() => {
         setCurrentRollingPlayer(null);
-      }, 3000); // Increased delay to 500ms so opponent can see rolling state
+      }, 1000);
     });
   }
 
   function handleTurnChanged(data) {
     setCurrentTurn(data.nextPlayer);
     setIsProcessingTurn(false);
+    
+    // Start timer for the new turn
+    startTimer(data.nextPlayer);
   }
 
   function handleGameEnded(data) {
+    clearTimer(); // Clear timer when game ends
+    
     const rolledValue = 6;
     animateDiceRoll(rolledValue, () => {
       // Haptic feedback immediately
@@ -267,26 +396,49 @@ export default function SixKingGame() {
           const isPlayerWinner = String(data.winner) === String(user.id);
           handleGameEnd(isPlayerWinner ? 'player' : 'opponent');
           setMatchStatus("Game Ended...");
-        }, 1000); // End game 500ms after crowns update
+        }, 1000);
         
       }, 1000);
       
       // Clear rolling state
       setTimeout(() => {
         setCurrentRollingPlayer(null);
-      }, 2000);
+      }, 1000);
     });
   }
 
   function handlePlayerLeft(data) {
-    setMatchStatus('Opponent left the game');
-    setTimeout(() => {
-      router.replace('/');
-    }, 500);
-  }
+      clearTimer();
+      
+      // Check if this was due to a timeout scenario
+      if (gameState === 'playing' && !showGameEndModal) {
+        // If game was still playing and we haven't shown end modal yet,
+        // this might be opponent leaving due to timeout
+        setMatchStatus('Opponent left the game - You win!');
+        
+        // Show win modal for remaining player
+        setTimeout(() => {
+          setGameEndResult({
+            isWinner: true,
+            amount: parseInt(stake) * 2,
+            stake: parseInt(stake),
+            reason: 'opponent_left'
+          });
+          setShowGameEndModal(true);
+          setGameState('finished');
+        }, 500);
+      } else {
+        // Normal player left scenario
+        setMatchStatus('Opponent left the game');
+        setTimeout(() => {
+          router.replace('/');
+        }, 500);
+      }
+    }
 
   function handleError(data) {
     console.error('❌ WebSocket error:', data);
+    clearTimer();
     setMatchStatus(`Error: ${data.message}`);
     if (data.code === 'GAME_NOT_FOUND' || data.code === 'GAME_FULL') {
       setTimeout(() => {
@@ -309,6 +461,9 @@ export default function SixKingGame() {
       return;
     }
 
+    // Clear timer when rolling
+    clearTimer();
+    
     setIsProcessingTurn(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
@@ -367,26 +522,27 @@ export default function SixKingGame() {
       }
     }, 120);
 
-    // FIXED: Ensure the callback runs only after ALL animations complete
+    // Ensure the callback runs only after ALL animations complete
     Animated.parallel([rotationAnimation, scaleAnimation]).start(() => {
       setIsRolling(false);
       diceRotation.setValue(0);
       
-      // FIXED: Add a small delay before calling onComplete to ensure dice value is set
+      // Add a small delay before calling onComplete
       setTimeout(() => {
         console.log('🎲 Animation completed, now updating crown badges');
         onComplete();
-      }, 200); // Small delay to ensure final dice value is visible before crowns update
+      }, 200);
     });
   }
 
-  // FIXED: Game end handler now shows modal instead of status messages
+  // Game end handler
   const handleGameEnd = async (winner) => {
+    clearTimer(); // Ensure timer is cleared
     const stakeAmount = parseInt(stake);
     if (winner === 'player') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Show game end modal after 2 seconds
+      // Show game end modal after 1 second
       setTimeout(() => {
         setGameEndResult({
           isWinner: true,
@@ -399,7 +555,7 @@ export default function SixKingGame() {
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
-      // Show game end modal after 2 seconds
+      // Show game end modal after 1 second
       setTimeout(() => {
         setGameEndResult({
           isWinner: false,
@@ -411,7 +567,7 @@ export default function SixKingGame() {
     }
   };
 
-  // NEW: Handle game end modal actions
+  // Handle game end modal actions
   const handleTryAgain = () => {
     setShowGameEndModal(false);
     // Navigate to stake selection page
@@ -420,6 +576,17 @@ export default function SixKingGame() {
 
   const handleExit = () => {
     setShowGameEndModal(false);
+    
+    // Send leave_game message when manually exiting
+    if (socket && roomCode && user.id) {
+      sendMessage('leave_game', { 
+        gameId: roomCode, 
+        playerId: user.id, 
+        opponentId: opponentId, 
+        stake: stake 
+      });
+    }
+    
     // Navigate to home page
     router.replace('/');
   };
@@ -442,6 +609,7 @@ export default function SixKingGame() {
           style: "destructive",
           onPress: () => {
             // User confirmed - proceed with leaving
+            clearTimer();
             setMatchStatus('Leaving game...');
             if (socket && roomCode && user.id) {
               sendMessage('leave_game', { gameId: roomCode, playerId: user.id , opponentId: opponentId, stake: stake});
@@ -513,7 +681,7 @@ export default function SixKingGame() {
       return 'WAITING FOR OPPONENT...';
     }
     
-    // FIXED: Show correct rolling state based on who is rolling
+    // Show correct rolling state based on who is rolling
     if (currentRollingPlayer) {
       if (String(currentRollingPlayer) === String(user.id)) {
         return 'ROLLING...';
@@ -538,13 +706,21 @@ export default function SixKingGame() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     return () => {
       backHandler.remove();
+      clearTimer();
       if (socket && roomCode && user.id) {
         sendMessage('leave_game', { gameId: roomCode, playerId: user.id });
       }
     };
   }, [socket, roomCode, user.id]);
 
-  // FIXED: Improved useEffect to prevent useInsertionEffect errors
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      clearTimer();
+    };
+  }, []);
+
+  // Animation effects
   useEffect(() => {
     let pulseAnimation;
     
@@ -573,7 +749,7 @@ export default function SixKingGame() {
     };
   }, [currentTurn, gameState, waitingForOpponent, currentRollingPlayer, pulseAnim]);
 
-  // FIXED: Six highlighting only when not rolling and dice value is 6
+  // Six highlighting only when not rolling and dice value is 6
   useEffect(() => {
     let glowAnimation;
     
@@ -616,7 +792,44 @@ export default function SixKingGame() {
         <Animated.View style={[styles.floatingElement, styles.element3]} />
       </View>
 
-      {/* NEW: Game End Modal */}
+      {/* Timer Display */}
+      {isTimerActive && gameState === 'playing' && !waitingForOpponent && (
+        <Animated.View 
+          style={[
+            styles.timerContainer,
+            showTimeoutWarning && {
+              transform: [{ scale: timerPulse }]
+            }
+          ]}
+        >
+          <LinearGradient
+            colors={
+              timeLeft <= WARNING_THRESHOLD 
+                ? ['#FF6B6B', '#EE5A24', '#E74C3C'] 
+                : ['#4ECDC4', '#44A08D', '#2ECC71']
+            }
+            style={styles.timerGradient}
+          >
+            <MaterialIcons 
+              name="timer" 
+              size={scale(16)} 
+              color="#fff" 
+            />
+            <Text style={styles.timerText}>
+              {formatTime(timeLeft)}
+            </Text>
+            {timeLeft <= WARNING_THRESHOLD && (
+              <MaterialIcons 
+                name="warning" 
+                size={scale(14)} 
+                color="#fff" 
+              />
+            )}
+          </LinearGradient>
+        </Animated.View>
+      )}
+
+      {/* Game End Modal */}
       <Modal
         visible={showGameEndModal}
         transparent={true}
@@ -647,6 +860,14 @@ export default function SixKingGame() {
                 {gameEndResult?.isWinner ? '🎉 YOU WON! 🎉' : '💔 YOU LOST'}
               </Text>
               
+              {/* Show reason for game end */}
+              {gameEndResult?.reason && (
+                <Text style={styles.gameEndReason}>
+                  {gameEndResult.reason === 'timeout' && 'Time ran out!'}
+                  {gameEndResult.reason === 'opponent_timeout' && 'Opponent timed out!'}
+                </Text>
+              )}
+              
               <Text style={styles.gameEndAmount}>
                 {gameEndResult?.isWinner 
                   ? `+₹${gameEndResult?.amount}` 
@@ -662,22 +883,7 @@ export default function SixKingGame() {
               </Text>
 
               {/* Action Buttons */}
-              {/* Action Buttons */}
               <View style={styles.gameEndActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={handleTryAgain}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={['#8B5CF6', '#EC4899']}
-                    style={styles.actionButtonGradient}
-                  >
-                    <MaterialIcons name="refresh" size={scale(20)} color="#fff" />
-                    <Text style={styles.actionButtonText}>TRY AGAIN</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={handleExit}
@@ -697,14 +903,14 @@ export default function SixKingGame() {
         </View>
       </Modal>
 
-      {/* Match Status Banner (instead of popup) */}
+      {/* Match Status Banner */}
       {matchStatus ? (
         <View style={styles.matchStatusBanner}>
           <LinearGradient
             colors={
-              matchStatus.includes('WON') 
+              matchStatus.includes('WON') || matchStatus.includes('win') 
                 ? ['#4ECDC4', '#44A08D', '#2ECC71'] 
-                : matchStatus.includes('Lost') 
+                : matchStatus.includes('Lost') || matchStatus.includes('lose') || matchStatus.includes('timed out')
                 ? ['#FF6B6B', '#EE5A24'] 
                 : matchStatus.includes("Don't give up") || matchStatus.includes('Keep playing')
                 ? ['#8B5CF6', '#EC4899']
@@ -714,9 +920,9 @@ export default function SixKingGame() {
           >
             <MaterialIcons 
               name={
-                matchStatus.includes('WON') 
+                matchStatus.includes('WON') || matchStatus.includes('win')
                   ? "celebration" 
-                  : matchStatus.includes('Lost') 
+                  : matchStatus.includes('Lost') || matchStatus.includes('lose') || matchStatus.includes('timed out')
                   ? "sentiment-dissatisfied"
                   : matchStatus.includes("Don't give up") || matchStatus.includes('Keep playing')
                   ? "rocket-launch"
@@ -730,8 +936,6 @@ export default function SixKingGame() {
         </View>
       ) : null}
 
-      {/* Six effect overlay */}
-
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
@@ -743,10 +947,6 @@ export default function SixKingGame() {
           <Text style={styles.rollCounter}>
             Room: {roomCode}
           </Text>
-          {/* Debug info (remove in production) */}
-          {/* {__DEV__ && (
-            <Text style={styles.debugText}>{getDebugInfo()}</Text>
-          )} */}
         </View>
         
         <View style={styles.stakeContainer}>
@@ -757,88 +957,88 @@ export default function SixKingGame() {
 
       {/* Players Section */}
       <View style={styles.playersContainer}>
-  {/* Player - Always on LEFT */}
-  <Animated.View 
-    style={[
-      styles.playerCard,
-      styles.playerCardSelf,
-      // Show player highlighting only when player is playing/rolling
-      ((isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
-       (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && { 
-        transform: [{ scale: pulseAnim }],
-        shadowOpacity: 0.6,
-      }
-    ]}
-  >
-    <LinearGradient
-      colors={['rgba(78, 205, 196, 0.3)', 'rgba(78, 205, 196, 0.1)']}
-      style={styles.playerCardGradient}
-    >
-      <View style={styles.playerAvatar}>
-        <Text style={styles.avatarEmoji}>👤</Text>
-      </View>
-      <Text style={styles.playerName}>You</Text>
-      {renderSixesProgress(playerSixes, true)}
-      {/* Show turn indicator for player when it's their turn or they're rolling */}
-      {((isMyTurn() && !waitingForOpponent && !currentRollingPlayer) ||
-        (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && (
-        <View style={styles.turnIndicator}>
-          <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
-          <Text style={styles.turnIndicatorText}>
-            {currentRollingPlayer && String(currentRollingPlayer) === String(user.id) 
-              ? 'Rolling...' 
-              : 'Your Turn!'}
-          </Text>
-        </View>
-      )}
-    </LinearGradient>
-  </Animated.View>
+        {/* Player - Always on LEFT */}
+        <Animated.View 
+          style={[
+            styles.playerCard,
+            styles.playerCardSelf,
+            // Show player highlighting only when player is playing/rolling
+            ((isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
+             (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && { 
+              transform: [{ scale: pulseAnim }],
+              shadowOpacity: 0.6,
+            }
+          ]}
+        >
+          <LinearGradient
+            colors={['rgba(78, 205, 196, 0.3)', 'rgba(78, 205, 196, 0.1)']}
+            style={styles.playerCardGradient}
+          >
+            <View style={styles.playerAvatar}>
+              <Text style={styles.avatarEmoji}>👤</Text>
+            </View>
+            <Text style={styles.playerName}>You</Text>
+            {renderSixesProgress(playerSixes, true)}
+            {/* Show turn indicator for player when it's their turn or they're rolling */}
+            {((isMyTurn() && !waitingForOpponent && !currentRollingPlayer) ||
+              (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && (
+              <View style={styles.turnIndicator}>
+                <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
+                <Text style={styles.turnIndicatorText}>
+                  {currentRollingPlayer && String(currentRollingPlayer) === String(user.id) 
+                    ? 'Rolling...' 
+                    : 'Your Turn!'}
+                </Text>
+              </View>
+            )}
+          </LinearGradient>
+        </Animated.View>
 
-  {/* VS Badge */}
-  <LinearGradient
-    colors={['#8B5CF6', '#EC4899']}
-    style={styles.vsContainer}
-  >
-    <Text style={styles.vsText}>VS</Text>
-  </LinearGradient>
+        {/* VS Badge */}
+        <LinearGradient
+          colors={['#8B5CF6', '#EC4899']}
+          style={styles.vsContainer}
+        >
+          <Text style={styles.vsText}>VS</Text>
+        </LinearGradient>
 
-  {/* Opponent - Always on RIGHT */}
-  <Animated.View 
-    style={[
-      styles.playerCard,
-      styles.opponentCard,
-      // Show opponent highlighting only when opponent is playing/rolling
-      ((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
-       (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && { 
-        transform: [{ scale: pulseAnim }],
-        shadowOpacity: 0.6,
-      }
-    ]}
-  >
-    <LinearGradient
-      colors={['rgba(255, 107, 107, 0.3)', 'rgba(255, 107, 107, 0.1)']}
-      style={styles.playerCardGradient}
-    >
-      <View style={styles.playerAvatar}>
-        <Text style={styles.avatarEmoji}>🤖</Text>
+        {/* Opponent - Always on RIGHT */}
+        <Animated.View 
+          style={[
+            styles.playerCard,
+            styles.opponentCard,
+            // Show opponent highlighting only when opponent is playing/rolling
+            ((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
+             (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && { 
+              transform: [{ scale: pulseAnim }],
+              shadowOpacity: 0.6,
+            }
+          ]}
+        >
+          <LinearGradient
+            colors={['rgba(255, 107, 107, 0.3)', 'rgba(255, 107, 107, 0.1)']}
+            style={styles.playerCardGradient}
+          >
+            <View style={styles.playerAvatar}>
+              <Text style={styles.avatarEmoji}>🤖</Text>
+            </View>
+            <Text style={styles.playerName}>{opponentName}</Text>
+            {renderSixesProgress(opponentSixes, false)}
+            {/* Show turn indicator for opponent when it's their turn or they're rolling */}
+            {((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
+              (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && (
+              <View style={styles.turnIndicator}>
+                <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
+                <Text style={styles.turnIndicatorText}>
+                  {currentRollingPlayer && String(currentRollingPlayer) !== String(user.id) 
+                    ? 'Rolling...' 
+                    : 'Playing...'}
+                </Text>
+              </View>
+            )}
+          </LinearGradient>
+        </Animated.View>
       </View>
-      <Text style={styles.playerName}>{opponentName}</Text>
-      {renderSixesProgress(opponentSixes, false)}
-      {/* Show turn indicator for opponent when it's their turn or they're rolling */}
-      {((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
-        (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && (
-        <View style={styles.turnIndicator}>
-          <MaterialIcons name="flash-on" size={scale(14)} color="#FFD700" />
-          <Text style={styles.turnIndicatorText}>
-            {currentRollingPlayer && String(currentRollingPlayer) !== String(user.id) 
-              ? 'Rolling...' 
-              : 'Playing...'}
-          </Text>
-        </View>
-      )}
-    </LinearGradient>
-  </Animated.View>
-    </View>
 
       {/* Dice Section - Show when game is playing */}
       {(gameState === 'playing' && !waitingForOpponent) && (
@@ -859,7 +1059,7 @@ export default function SixKingGame() {
               },
             ]}
           >
-            {/* FIXED: Only show glow effects when dice shows 6 AND not rolling AND no one is currently rolling */}
+            {/* Only show glow effects when dice shows 6 AND not rolling AND no one is currently rolling */}
             {diceValue === 6 && !isRolling && !currentRollingPlayer && (
               <>
                 <Animated.View 
@@ -913,7 +1113,7 @@ export default function SixKingGame() {
               />
             </LinearGradient>
             
-            {/* FIXED: Only show sparkles when dice shows 6 AND not rolling AND no one is currently rolling */}
+            {/* Only show sparkles when dice shows 6 AND not rolling AND no one is currently rolling */}
             {diceValue === 6 && !isRolling && !currentRollingPlayer && (
               <>
                 <Animated.View 
@@ -954,7 +1154,7 @@ export default function SixKingGame() {
             )}
           </Animated.View>
 
-          {/* FIXED: Only show crown text when dice shows 6 AND not rolling AND no one is currently rolling */}
+          {/* Only show crown text when dice shows 6 AND not rolling AND no one is currently rolling */}
           {diceValue === 6 && !isRolling && !currentRollingPlayer && (playerSixes < 3 && opponentSixes < 3) && (
             <View style={styles.sixTextContainer}>
               <Text style={styles.sixText}>Crown Earned! 👑</Text>
@@ -965,44 +1165,44 @@ export default function SixKingGame() {
 
       {/* Action Container */}
       <View style={styles.actionContainer}>
-      {canPlayerRoll() ? (
-        <TouchableOpacity
-          style={styles.rollButton}
-          onPress={rollDice}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#4ECDC4', '#44A08D', '#2ECC71']}
-            style={styles.rollButtonGradient}
+        {canPlayerRoll() ? (
+          <TouchableOpacity
+            style={styles.rollButton}
+            onPress={rollDice}
+            activeOpacity={0.8}
           >
-            <MaterialIcons 
-              name="casino" 
-              size={scale(24)} 
-              color="#fff" 
-            />
-            <Text style={styles.rollButtonText}>
-              ROLL DICE
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient
+              colors={['#4ECDC4', '#44A08D', '#2ECC71']}
+              style={styles.rollButtonGradient}
+            >
+              <MaterialIcons 
+                name="casino" 
+                size={scale(24)} 
+                color="#fff" 
+              />
+              <Text style={styles.rollButtonText}>
+                ROLL DICE
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
         ) : (
-  <View style={styles.disabledButtonContainer}>
-    <LinearGradient
-      colors={['#6c757d', '#495057', '#343a40']}
-      style={styles.rollButtonGradient}
-    >
-      <MaterialIcons 
-        name={waitingForOpponent ? "hourglass-empty" : 
-             (currentRollingPlayer || isRolling) ? "autorenew" : "pause"} 
-        size={scale(24)} 
-        color="#adb5bd" 
-      />
-      <Text style={styles.disabledButtonText}>
-        {getDisabledButtonText()}
-      </Text>
-    </LinearGradient>
-  </View>
-)}
+          <View style={styles.disabledButtonContainer}>
+            <LinearGradient
+              colors={['#6c757d', '#495057', '#343a40']}
+              style={styles.rollButtonGradient}
+            >
+              <MaterialIcons 
+                name={waitingForOpponent ? "hourglass-empty" : 
+                     (currentRollingPlayer || isRolling) ? "autorenew" : "pause"} 
+                size={scale(24)} 
+                color="#adb5bd" 
+              />
+              <Text style={styles.disabledButtonText}>
+                {getDisabledButtonText()}
+              </Text>
+            </LinearGradient>
+          </View>
+        )}
       </View>
 
       {/* Game Status */}
@@ -1025,11 +1225,81 @@ export default function SixKingGame() {
     </LinearGradient>
   );
 }
+
 const styles = StyleSheet.create({
+  // ===== CONTAINER & LAYOUT =====
   container: {
     flex: 1,
   },
-  // NEW: Game End Modal Styles
+  backgroundElements: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  floatingElement: {
+    position: 'absolute',
+    borderRadius: 100,
+    opacity: 0.1,
+  },
+  element1: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#8B5CF6',
+    top: -50,
+    left: -50,
+  },
+  element2: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#EC4899',
+    top: 200,
+    right: -30,
+  },
+  element3: {
+    width: 180,
+    height: 180,
+    backgroundColor: '#06D6A0',
+    bottom: 100,
+    left: -40,
+  },
+
+  // ===== TIMER STYLES =====
+  timerContainer: {
+    position: 'absolute',
+    bottom: height * 0.22, // Positioned above the roll dice button
+    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    marginHorizontal: width * 0.4,
+    zIndex: 1000,
+    borderRadius: scale(20),
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  timerGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: scale(10),
+    paddingHorizontal: scale(16),
+  },
+  timerText: {
+    color: '#fff',
+    fontSize: scale(14),
+    fontWeight: 'bold',
+    marginHorizontal: scale(8),
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // ===== GAME END MODAL STYLES =====
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -1066,6 +1336,14 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
+  },
+  gameEndReason: {
+    fontSize: scale(14),
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: scale(10),
+    opacity: 0.8,
+    fontStyle: 'italic',
   },
   gameEndAmount: {
     fontSize: scale(32),
@@ -1117,6 +1395,8 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+
+  // ===== STATUS BANNER STYLES =====
   matchStatusBanner: {
     position: 'absolute',
     top: height * 0.12,
@@ -1149,65 +1429,8 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
     flexShrink: 1,
   },
-  backgroundElements: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  floatingElement: {
-    position: 'absolute',
-    borderRadius: 100,
-    opacity: 0.1,
-  },
-  element1: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#8B5CF6',
-    top: -50,
-    left: -50,
-  },
-  element2: {
-    width: 150,
-    height: 150,
-    backgroundColor: '#EC4899',
-    top: 200,
-    right: -30,
-  },
-  element3: {
-    width: 180,
-    height: 180,
-    backgroundColor: '#06D6A0',
-    bottom: 100,
-    left: -40,
-  },
-  sixEffectOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  sixEffectText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-  },
-  sixEffectGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
+
+  // ===== HEADER STYLES =====
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1280,6 +1503,8 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+
+  // ===== PLAYER CARD STYLES =====
   playersContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1403,6 +1628,8 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
   },
+
+  // ===== DICE STYLES =====
   diceSection: {
     flex: 1,
     justifyContent: 'center',
@@ -1487,6 +1714,8 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+
+  // ===== ACTION BUTTON STYLES =====
   actionContainer: {
     paddingHorizontal: width * 0.05,
     marginBottom: height * 0.03,
@@ -1528,6 +1757,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: scale(10),
   },
+
+  // ===== STATUS STYLES =====
   statusContainer: {
     alignItems: 'center',
     paddingHorizontal: width * 0.05,
@@ -1557,5 +1788,33 @@ const styles = StyleSheet.create({
     fontSize: scale(11),
     textAlign: 'center',
     marginTop: scale(4),
+  },
+
+  // ===== SPECIAL EFFECTS STYLES =====
+  sixEffectOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  sixEffectText: {
+    fontSize: scale(32),
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  sixEffectGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });

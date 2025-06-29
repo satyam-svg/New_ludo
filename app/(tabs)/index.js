@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,9 @@ import {
   Dimensions,
   Animated,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  BackHandler,
+  FlatList
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,6 +25,71 @@ const { width } = Dimensions.get('window');
 
 const STAKES = [10, 30, 50, 100, 500, 1000];
 
+// Game Rules Data
+const gameRules = [
+  {
+    id: 'six-king',
+    title: '6 King Multiplayer',
+    icon: 'casino',
+    gradient: ['#FF6B6B', '#FF8E53'],
+    rules: [
+      '🎯 Play against real opponents',
+      '🎲 First turn is randomly decided',
+      '👑 First to get 3 sixes wins',
+      '💰 Winner takes 2x stake',
+      '⚡ Instant matchmaking'
+    ],
+    badge: 'LIVE',
+    badgeColor: '#2ECC71'
+  },
+  {
+    id: 'lucky-number',
+    title: 'Lucky Number',
+    icon: 'stars',
+    gradient: ['#4ECDC4', '#44A08D'],
+    rules: [
+      '🔢 Choose your lucky number (1-6)',
+      '🎲 Get 2 chances to roll it',
+      '🍀 Higher chances of success',
+      '💎 Win 2.5x your stake',
+      '⭐ Single player game'
+    ],
+    badge: 'SOLO',
+    badgeColor: '#4ECDC4'
+  },
+  {
+    id: 'matka-king',
+    title: 'Matka King',
+    icon: 'schedule',
+    gradient: ['#8B5CF6', '#7C3AED'],
+    rules: [
+      '⏰ Play in specific time slots',
+      '🔢 Pick a number (0-9)',
+      '🏆 10x payout if you win',
+      '📅 Multiple slots daily',
+      '👥 Minimum 25 players required'
+    ],
+    badge: 'SLOTS',
+    badgeColor: '#8B5CF6'
+  },
+  {
+    id: 'snake-king',
+    title: 'Snake King',
+    icon: 'bug-report',
+    gradient: ['#4E9525', '#2B5E20'],
+    rules: [
+      '🐍 Avoid snakes on the board',
+      '🪜 Ladders boost your winnings',
+      '💸 Easy money in just 5-15 rolls',
+      '🔥 Win up to 15x your stake!',
+      '⚡ Pick your risk, pick your reward'
+
+    ],
+    badge: 'BOARD',
+    badgeColor: '#4E9525'
+  }
+];
+
 export default function HomeScreen() {
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedStake, setSelectedStake] = useState(null);
@@ -30,11 +97,20 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [balance, setBalance] = useState(0);
   const [email, setEmail] = useState('');
+  const [currentRuleIndex, setCurrentRuleIndex] = useState(0);
   
   const { user, updateWallet } = useAuth();
+  const rulesCarouselRef = useRef(null);
 
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
   const slideAnim = React.useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackToGames);
+    return () => {
+      backHandler.remove();
+    };
+  }, []);
 
   const games = [
     {
@@ -44,7 +120,7 @@ export default function HomeScreen() {
       icon: 'casino',
       gradient: ['#FF6B6B', '#FF8E53'],
       multiplier: '2x',
-      isMultiplayer: true, // Add this flag
+      isMultiplayer: true,
       badge: 'MULTIPLAYER'
     },
     {
@@ -55,24 +131,158 @@ export default function HomeScreen() {
       gradient: ['#4ECDC4', '#44A08D'],
       multiplier: '2.5x'
     },
-    // Add Matka King game option
     {
       id: 'matka-king',
       title: 'Matka King',
-      description: 'Play in time slots\nWin 9.5x your stake!',
+      description: 'Play in time slots\nWin 10x your stake!',
       icon: 'schedule',
       gradient: ['#8B5CF6', '#7C3AED'],
-      multiplier: '9.5x'
+      multiplier: '10x',
+      isMultiplayer: true,
     },
     {
       id: 'snake-king',
       title: 'Snake King',
-      description: 'Beat snakes \nWin upto 15x your stake!',
+      description: 'Beat snakes \nWin upto 16x your stake!',
       icon: 'bug-report',
       gradient: ['#4E9525', '#2B5E20'],
-      multiplier: '2x - 15x'
+      multiplier: '2x - 16x'
     }
   ];
+
+  // Create cyclic data for infinite scroll
+  const cyclicGameRules = [
+    ...gameRules.slice(-1), // Last item at beginning
+    ...gameRules,           // Original items
+    ...gameRules.slice(0, 1) // First item at end
+  ];
+
+  // Auto-scroll effect for rules carousel
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (rulesCarouselRef.current && showGames) {
+        const nextIndex = (currentRuleIndex + 1) % gameRules.length;
+        const scrollIndex = nextIndex + 1; // Account for the prepended item
+        
+        rulesCarouselRef.current.scrollToIndex({
+          index: scrollIndex,
+          animated: true,
+        });
+        setCurrentRuleIndex(nextIndex);
+      }
+    }, 4000); // Auto-scroll every 4 seconds
+
+    return () => clearInterval(interval);
+  }, [currentRuleIndex, showGames]);
+
+  // Handle manual scroll
+  const handleRulesScroll = (event) => {
+    const scrollPosition = event.nativeEvent.contentOffset.x;
+    const cardWidth = width * 0.85 + 15; // Card width + separator
+    const index = Math.round(scrollPosition / cardWidth);
+    
+    // Handle cyclic logic
+    if (index === 0) {
+      // Scrolled to the duplicate last item at beginning
+      setTimeout(() => {
+        rulesCarouselRef.current?.scrollToIndex({
+          index: gameRules.length,
+          animated: false,
+        });
+      }, 100);
+      setCurrentRuleIndex(gameRules.length - 1);
+    } else if (index === cyclicGameRules.length - 1) {
+      // Scrolled to the duplicate first item at end
+      setTimeout(() => {
+        rulesCarouselRef.current?.scrollToIndex({
+          index: 1,
+          animated: false,
+        });
+      }, 100);
+      setCurrentRuleIndex(0);
+    } else {
+      // Normal scroll within bounds
+      setCurrentRuleIndex(index - 1);
+    }
+  };
+
+  // Game Rules Card Component with enhanced styling
+  const GameRuleCard = ({ game, index }) => {
+    const isActive = (index % gameRules.length) === currentRuleIndex;
+    
+    return (
+      <Animated.View style={[
+        styles.ruleCard,
+        {
+          transform: [{
+            scale: isActive ? 1 : 0.95
+          }],
+          opacity: isActive ? 1 : 0.8
+        }
+      ]}>
+        <LinearGradient
+          colors={[...game.gradient, 'rgba(0, 0, 0, 0.1)']}
+          style={styles.ruleCardGradient}
+        >
+          {/* Header */}
+          <View style={styles.ruleCardHeader}>
+            <View style={styles.ruleIconContainer}>
+              <MaterialIcons name={game.icon} size={24} color="#fff" />
+            </View>
+            <View style={styles.ruleHeaderText}>
+              <Text style={styles.ruleCardTitle}>{game.title}</Text>
+              <View style={[styles.ruleBadge, { backgroundColor: game.badgeColor }]}>
+                <Text style={styles.ruleBadgeText}>{game.badge}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Rules List */}
+          <View style={styles.rulesList}>
+            {game.rules.map((rule, ruleIndex) => (
+              <Animated.View 
+                key={ruleIndex} 
+                style={[
+                  styles.ruleItem,
+                  {
+                    transform: [{
+                      translateX: isActive ? 0 : -10
+                    }],
+                    opacity: isActive ? 1 : 0.7
+                  }
+                ]}
+              >
+                <Text style={styles.ruleText}>{rule}</Text>
+              </Animated.View>
+            ))}
+          </View>
+
+          {/* Play Button */}
+          <TouchableOpacity 
+            style={styles.rulePlayButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              if (game.id === 'six-king') {
+                router.push('/games/six-king-lobby');
+              } else if (game.id === 'matka-king') {
+                router.push('/games/matka-king');
+              } else {
+                handleGameSelect(games.find(g => g.id === game.id));
+              }
+            }}
+          >
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.1)']}
+              style={styles.rulePlayGradient}
+            >
+              <MaterialIcons name="play-arrow" size={18} color="#fff" />
+              <Text style={styles.rulePlayText}>Play Now</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </LinearGradient>
+      </Animated.View>
+    );
+  };
 
   useFocusEffect(
     React.useCallback(() => {
@@ -93,12 +303,11 @@ export default function HomeScreen() {
           if (!response.ok) throw new Error('Failed to fetch user data');
           
           const data = await response.json();
-          console.log(data);
+          // console.log(data);
           const wallet = data.wallet;
           setBalance(wallet);
           setEmail(data.email);
           
-          // Update wallet in global context
           updateWallet(wallet);
         } catch (error) {
           console.error('User data fetch error:', error);
@@ -113,7 +322,6 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
-    // Initialize with context data if available
     if (user) {
       setBalance(user.wallet || 0);
       setEmail(user.email || '');
@@ -125,13 +333,16 @@ export default function HomeScreen() {
     setSelectedGame(game);
     setSelectedStake(null);
     
-    // For Six King (multiplayer), go directly to lobby
     if (game.id === 'six-king') {
       router.push('/games/six-king-lobby');
       return;
     }
     
-    // For other games, show stake selection
+    if (game.id === 'matka-king') {
+      router.push('/games/matka-king');
+      return;
+    }
+
     Animated.timing(slideAnim, {
       toValue: 1,
       duration: 300,
@@ -156,7 +367,6 @@ export default function HomeScreen() {
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     
-    // Animate before navigation
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.95,
@@ -169,21 +379,25 @@ export default function HomeScreen() {
         useNativeDriver: true,
       })
     ]).start(() => {
-      // Navigate to Matka King screen if selected
       if (selectedGame.id === 'matka-king') {
         router.push({
           pathname: '/games/matka-king',
           params: { stake: selectedStake }
         });
       }
-      else if (selectedGame.id == 'snake-king'){
+      else if (selectedGame.id === 'snake-king'){
         router.push({
           pathname: '/games/snake-king-lobby',
           params: { stake: selectedStake }
         });
       }
+      else if (selectedGame.id === 'lucky-number'){
+        router.push({
+          pathname: `/games/lucky-number-lobby`,
+          params: { stake: selectedStake }
+        });
+      }
        else {
-        // For other games
         router.push({
           pathname: `/games/${selectedGame.id}`,
           params: { stake: selectedStake }
@@ -198,12 +412,12 @@ export default function HomeScreen() {
     setSelectedStake(null);
     setShowGames(true);
     
-    // Reset animation
     Animated.timing(slideAnim, {
       toValue: 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
+    return true;
   };
 
   return (
@@ -229,7 +443,6 @@ export default function HomeScreen() {
         
         {/* Conditional Content Based on Flow */}
         {showGames ? (
-          // Game Selection Screen
           <>
             {/* Hero Section */}
             <View style={styles.heroSection}>
@@ -253,18 +466,19 @@ export default function HomeScreen() {
                       style={styles.gameCardGradient}
                     >
                       <View style={styles.gameCardContent}>
-                        {/* Game Badge */}
-                        <View style={[
-                          styles.gameBadge,
-                          game.isMultiplayer ? styles.multiplayerBadge : styles.soloBadge
-                        ]}>
-                          <MaterialIcons 
-                            name={game.isMultiplayer ? "people" : "person"} 
-                            size={12} 
-                            color="#fff" 
-                          />
-                          <Text style={styles.badgeText}>{game.badge}</Text>
-                        </View>
+                        {game.badge && (
+                          <View style={[
+                            styles.gameBadge,
+                            game.isMultiplayer ? styles.multiplayerBadge : styles.soloBadge
+                          ]}>
+                            <MaterialIcons 
+                              name={game.isMultiplayer ? "people" : "person"} 
+                              size={12} 
+                              color="#fff" 
+                            />
+                            <Text style={styles.badgeText}>{game.badge}</Text>
+                          </View>
+                        )}
                         
                         <MaterialIcons name={game.icon} size={40} color="#fff" />
                         <Text style={styles.gameTitle}>{game.title}</Text>
@@ -285,6 +499,68 @@ export default function HomeScreen() {
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Game Rules Section - Enhanced with Cyclic Mode */}
+            <View style={styles.gameRulesSection}>
+              <View style={styles.rulesHeader}>
+                <MaterialIcons name="rule" size={24} color="#FFD700" />
+                <Text style={styles.rulesTitle}>Game Rules & How to Play</Text>
+              </View>
+              <Text style={styles.rulesSubtitle}>
+                 Swipe to explore each game
+              </Text>
+              
+              <FlatList
+                ref={rulesCarouselRef}
+                data={cyclicGameRules}
+                renderItem={({ item, index }) => <GameRuleCard game={item} index={index} />}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={width * 0.85 + 15}
+                snapToAlignment="start"
+                decelerationRate="fast"
+                contentContainerStyle={styles.rulesCardsContainer}
+                ItemSeparatorComponent={() => <View style={{ width: 15 }} />}
+                initialScrollIndex={1} // Start from the first real item
+                getItemLayout={(data, index) => ({
+                  length: width * 0.85 + 15,
+                  offset: (width * 0.85 + 15) * index,
+                  index,
+                })}
+                onMomentumScrollEnd={handleRulesScroll}
+                onScrollToIndexFailed={(info) => {
+                  const wait = new Promise(resolve => setTimeout(resolve, 500));
+                  wait.then(() => {
+                    rulesCarouselRef.current?.scrollToIndex({ 
+                      index: info.index, 
+                      animated: true 
+                    });
+                  });
+                }}
+              />
+              
+              {/* Pagination Dots */}
+              <View style={styles.paginationContainer}>
+                {gameRules.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      currentRuleIndex === index && styles.paginationDotActive
+                    ]}
+                    onPress={() => {
+                      const scrollIndex = index + 1; // Account for the prepended item
+                      rulesCarouselRef.current?.scrollToIndex({
+                        index: scrollIndex,
+                        animated: true,
+                      });
+                      setCurrentRuleIndex(index);
+                    }}
+                  />
                 ))}
               </View>
             </View>
@@ -322,41 +598,10 @@ export default function HomeScreen() {
                   >
                     <MaterialIcons name="trending-up" size={30} color="#FFD700" />
                     <Text style={styles.featureTitle}>High Rewards</Text>
-                    <Text style={styles.featureDescription}>Win up to 9.5x</Text>
+                    <Text style={styles.featureDescription}>Win up to 15x</Text>
                   </LinearGradient>
                 </View>
               </View>
-            </View>
-
-            {/* Multiplayer Highlight Section */}
-            <View style={styles.multiplayerHighlight}>
-              <LinearGradient
-                colors={['rgba(255, 107, 107, 0.1)', 'rgba(255, 142, 83, 0.05)']}
-                style={styles.highlightContainer}
-              >
-                <View style={styles.highlightHeader}>
-                  <MaterialIcons name="people" size={24} color="#FF6B6B" />
-                  <Text style={styles.highlightTitle}>New: Multiplayer Six King!</Text>
-                </View>
-                <Text style={styles.highlightDescription}>
-                  🎯 Play against real opponents worldwide{'\n'}
-                  👑 First to 3 sixes wins{'\n'}
-                  ⚡ Instant matchmaking{'\n'}
-                  🏆 Win double your stake
-                </Text>
-                <TouchableOpacity 
-                  style={styles.tryNowButton}
-                  onPress={() => router.push('/games/six-king-lobby')}
-                >
-                  <LinearGradient
-                    colors={['#FF6B6B', '#FF8E53']}
-                    style={styles.tryNowGradient}
-                  >
-                    <Text style={styles.tryNowText}>Try Now</Text>
-                    <MaterialIcons name="arrow-forward" size={16} color="#fff" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              </LinearGradient>
             </View>
 
             {/* Stats Section */}
@@ -395,7 +640,7 @@ export default function HomeScreen() {
             </View>
           </>
         ) : (
-          // Stakes Selection Screen (Only for Lucky Number now)
+          // Stakes Selection Screen
           <Animated.View 
             style={[
               styles.stakesScreenContainer,
@@ -410,12 +655,10 @@ export default function HomeScreen() {
               }
             ]}
           >
-            {/* Back Button */}
             <TouchableOpacity style={styles.backButton} onPress={handleBackToGames}>
               <MaterialIcons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
 
-            {/* Selected Game Display */}
             <View style={styles.selectedGameSection}>
               <Text style={styles.selectedGameLabel}>Selected Game</Text>
               <View style={styles.selectedGameCard}>
@@ -430,7 +673,6 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Stake Selection */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Select Your Stake</Text>
               <View style={styles.stakesContainer}>
@@ -463,7 +705,6 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Play Button */}
             {selectedStake && (
               <Animated.View 
                 style={[
@@ -498,8 +739,6 @@ export default function HomeScreen() {
     </LinearGradient>
   );
 }
-
-// ... (previous code remains the same)
 
 const styles = StyleSheet.create({
   container: {
@@ -550,7 +789,7 @@ const styles = StyleSheet.create({
   gamesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    flexWrap: 'wrap', // Added to wrap games on smaller screens
+    flexWrap: 'wrap',
   },
   gameCard: {
     width: (width - 50) / 2,
@@ -561,7 +800,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    marginBottom: 20, // Added spacing between cards
+    marginBottom: 20,
   },
   gameCardGradient: {
     padding: 20,
@@ -649,50 +888,135 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2ECC71',
   },
-  multiplayerHighlight: {
-    paddingHorizontal: 20,
+  
+  // New Game Rules Section Styles
+  gameRulesSection: {
     marginBottom: 30,
   },
-  highlightContainer: {
-    padding: 20,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 107, 0.3)',
-  },
-  highlightHeader: {
+  rulesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  highlightTitle: {
-    fontSize: 18,
+  rulesTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
     marginLeft: 10,
+    textAlign: 'center',
   },
-  highlightDescription: {
+  rulesSubtitle: {
     fontSize: 14,
-    color: '#fff',
-    lineHeight: 22,
-    marginBottom: 15,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
-  tryNowButton: {
-    alignSelf: 'flex-start',
+  rulesCardsContainer: {
+    paddingHorizontal: 20,
+  },
+  ruleCard: {
+    width: width * 0.85,
     borderRadius: 20,
     overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
-  tryNowGradient: {
+  ruleCardGradient: {
+    padding: 20,
+    minHeight: 280,
+  },
+  ruleCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    marginBottom: 20,
   },
-  tryNowText: {
+  ruleIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  ruleHeaderText: {
+    flex: 1,
+  },
+  ruleCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  ruleBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ruleBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  rulesList: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  ruleItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  ruleText: {
+    fontSize: 14,
+    color: '#fff',
+    lineHeight: 20,
+    flex: 1,
+  },
+  rulePlayButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  },
+  rulePlayGradient: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  rulePlayText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#fff',
-    marginRight: 8,
+    marginLeft: 8,
   },
+
+  // Pagination Dots Styles
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingHorizontal: 20,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    marginHorizontal: 4,
+  },
+  paginationDotActive: {
+    backgroundColor: '#FFD700',
+    width: 20,
+  },
+
   stakesScreenContainer: {
     flex: 1,
     paddingTop: 60,

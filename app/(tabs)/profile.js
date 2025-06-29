@@ -17,6 +17,7 @@ import { useAuth } from '../../hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import config from '../../config';
+
 const { width } = Dimensions.get('window');
 const API_BASE_URL = `${config.BASE_URL}/api/users`;
 
@@ -24,39 +25,6 @@ export default function ProfileScreen() {
   const { user, logout, updateWallet } = useAuth();
   const [showReferralCode, setShowReferralCode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    sixKingWins: 0,
-    luckyNumberWins: 0,
-    totalWinnings: 0
-  });
-
-  // Fetch user stats
-  const fetchUserStats = async () => {
-    try {
-      setIsLoading(true);
-      const token = await AsyncStorage.getItem('authToken');
-      
-      const response = await fetch(`${API_BASE_URL}/stats`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to fetch stats');
-      
-      setStats({
-        sixKingWins: data.sixKingWins || 0,
-        luckyNumberWins: data.luckyNumberWins || 0,
-        totalWinnings: data.totalWinnings || 0
-      });
-    } catch (error) {
-      console.error('Stats fetch error:', error);
-      Alert.alert('Error', 'Failed to load game statistics');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Fetch user data
   const fetchUserData = async () => {
@@ -85,7 +53,6 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     fetchUserData();
-    fetchUserStats();
   }, []);
 
   const handleLogout = () => {
@@ -109,7 +76,7 @@ export default function ProfileScreen() {
   const handleShareReferral = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const shareMessage = `🎮 Join me on Gaming Arena and start winning real money!\n\nUse my referral code: ${user?.ownReferralCode}\n\nDownload now and get bonus money to start playing! 💰\n\n#GamingArena #RealMoney #Gaming`;
+      const shareMessage = `🎮 Join me on Gaming Arena and start winning real money!\n\nUse my referral code: ${user?.referralCode}\n\nDownload now and get bonus money to start playing! 💰\n\n#GamingArena #RealMoney #Gaming`;
       
       await Share.share({
         message: shareMessage,
@@ -122,7 +89,7 @@ export default function ProfileScreen() {
 
   const handleCopyReferralCode = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await Clipboard.setStringAsync(user?.ownReferralCode || '');
+    await Clipboard.setStringAsync(user?.referralCode || '');
     Alert.alert('Copied!', 'Referral code copied to clipboard');
   };
 
@@ -145,7 +112,7 @@ export default function ProfileScreen() {
       icon: 'help',
       onPress: () => Alert.alert(
         'Game Rules',
-        '🎲 Six King: First player to roll three 6s wins 2x stake\n\n⭐ Lucky Number: Choose a number (1-6), get 2 rolls to hit it, win 2.5x stake\n\nThe dice in Lucky Number is biased in your favor!'
+        '🎲 Six King: First player to roll three 6s wins 2x stake\n\n⭐ Lucky Number: Choose a number (1-6), get 2 rolls to hit it, win 2.5x stake\n\n🐍 Snake King: Survive rolls without hitting snakes\n\n🎰 Matka King: Bet on numbers in time slots, win 10x stake'
       ),
     },
     {
@@ -176,23 +143,42 @@ export default function ProfileScreen() {
           <Text style={styles.headerTitle}>Profile</Text>
         </View>
 
-        {/* Profile Card */}
+        {/* Profile Card - Option 3: Simple & Clean */}
         <View style={styles.profileCard}>
           <LinearGradient
-            colors={['#4ECDC4', '#44A08D']}
+            colors={['#FF6B6B', '#FF8E53']}
             style={styles.profileGradient}
           >
-            <View style={styles.avatarContainer}>
-              <MaterialIcons name="person" size={50} color="#fff" />
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileEmail}>{user?.email}</Text>
-              <Text style={styles.profileJoinDate}>
-                Joined {user?.joinedAt ? formatDate(user.joinedAt) : 'recently'}
-              </Text>
-              <View style={styles.balanceContainer}>
-                <MaterialIcons name="account-balance-wallet" size={16} color="#fff" />
-                <Text style={styles.balanceText}>₹{user?.wallet || 0}</Text>
+            <View style={styles.simpleProfileContent}>
+              <View style={styles.profileIconRow}>
+                <View style={styles.largeAvatarContainer}>
+                  <MaterialIcons name="account-circle" size={80} color="#fff" />
+                </View>
+                <View style={styles.verifiedBadge}>
+                  <MaterialIcons name="verified" size={20} color="#4ECDC4" />
+                  <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+              </View>
+              
+              <View style={styles.profileDetails}>
+                <Text style={styles.welcomeTitle}>Welcome Back!</Text>
+                <Text style={styles.playerIdText}>
+                  Player: ****{user?.phoneNumber?.slice(-4) || 'XXXX'}
+                </Text>
+                <Text style={styles.memberSince}>
+                  🎯 Ready to play and win big!
+                </Text>
+                
+                <View style={styles.quickStatsContainer}>
+                  <View style={styles.quickStat}>
+                    <MaterialIcons name="games" size={24} color="#fff" />
+                    <Text style={styles.quickStatText}>Play Games</Text>
+                  </View>
+                  <View style={styles.quickStat}>
+                    <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
+                    <Text style={styles.quickStatText}>Win Prizes</Text>
+                  </View>
+                </View>
               </View>
             </View>
           </LinearGradient>
@@ -228,11 +214,11 @@ export default function ProfileScreen() {
                   <View style={styles.referralCodeContainer}>
                     <Text style={styles.referralCodeLabel}>Your Referral Code:</Text>
                     <View style={styles.referralCodeBox}>
-                      <Text style={styles.referralCode}>{user?.ownReferralCode || 'LOADING...'}</Text>
+                      <Text style={styles.referralCode}>{user?.referralCode || 'LOADING...'}</Text>
                       <TouchableOpacity 
                         style={styles.copyButton}
                         onPress={handleCopyReferralCode}
-                        disabled={!user?.ownReferralCode}
+                        disabled={!user?.referralCode}
                       >
                         <MaterialIcons name="content-copy" size={16} color="#1a1a2e" />
                       </TouchableOpacity>
@@ -242,7 +228,7 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     style={styles.shareButton}
                     onPress={handleShareReferral}
-                    disabled={!user?.ownReferralCode}
+                    disabled={!user?.referralCode}
                   >
                     <MaterialIcons name="share" size={18} color="#1a1a2e" />
                     <Text style={styles.shareButtonText}>Share with Friends</Text>
@@ -251,36 +237,6 @@ export default function ProfileScreen() {
               )}
             </LinearGradient>
           </TouchableOpacity>
-        </View>
-
-        {/* Game Stats */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Game Statistics</Text>
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading statistics...</Text>
-            </View>
-          ) : (
-            <View style={styles.statsContainer}>
-              <View style={styles.statCard}>
-                <MaterialIcons name="casino" size={24} color="#4ECDC4" />
-                <Text style={styles.statNumber}>{stats.sixKingWins}</Text>
-                <Text style={styles.statLabel}>Six King Wins</Text>
-              </View>
-              
-              <View style={styles.statCard}>
-                <MaterialIcons name="stars" size={24} color="#FFD700" />
-                <Text style={styles.statNumber}>{stats.luckyNumberWins}</Text>
-                <Text style={styles.statLabel}>Lucky Number Wins</Text>
-              </View>
-              
-              <View style={styles.statCard}>
-                <MaterialIcons name="trending-up" size={24} color="#FF6B6B" />
-                <Text style={styles.statNumber}>₹{stats.totalWinnings}</Text>
-                <Text style={styles.statLabel}>Total Winnings</Text>
-              </View>
-            </View>
-          )}
         </View>
 
         {/* Options */}
@@ -359,49 +315,89 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   profileGradient: {
-    flexDirection: 'row',
+    // Remove flexDirection and alignItems for the new design
+  },
+  
+  // New Profile Card Styles (Option 3)
+  simpleProfileContent: {
     alignItems: 'center',
     padding: 20,
   },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+  profileIconRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    justifyContent: 'center',
+    marginBottom: 15,
+    position: 'relative',
   },
-  profileInfo: {
-    flex: 1,
+  largeAvatarContainer: {
+    position: 'relative',
   },
-  profileEmail: {
-    fontSize: 18,
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: -30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  verifiedText: {
+    fontSize: 10,
+    color: '#4ECDC4',
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  profileDetails: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  welcomeTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 5,
+    textAlign: 'center',
   },
-  profileJoinDate: {
-    fontSize: 12,
+  playerIdText: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.9,
+    marginBottom: 8,
+  },
+  memberSince: {
+    fontSize: 14,
     color: '#fff',
     opacity: 0.8,
-    marginBottom: 10,
+    marginBottom: 15,
+    textAlign: 'center',
   },
-  balanceContainer: {
+  quickStatsContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginTop: 10,
+  },
+  quickStat: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderRadius: 15,
-    alignSelf: 'flex-start',
+    flex: 1,
+    marginHorizontal: 5,
   },
-  balanceText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  quickStatText: {
+    fontSize: 11,
     color: '#fff',
-    marginLeft: 5,
+    fontWeight: '600',
+    marginTop: 5,
+    textAlign: 'center',
   },
+  
+  // Rest of the existing styles
   section: {
     paddingHorizontal: 20,
     marginBottom: 30,
@@ -484,31 +480,6 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
     marginLeft: 8,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: 20,
-    paddingHorizontal: 10,
-    borderRadius: 15,
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: '#888',
-    textAlign: 'center',
-  },
   optionsContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 15,
@@ -574,14 +545,5 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 20,
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    color: '#888',
-    fontSize: 14,
   },
 });
