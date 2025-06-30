@@ -476,195 +476,193 @@ export default function SnakeGameScreen() {
     moveOneStep();
   };
 
-  const rollDice = async () => {
-    if (isRolling || gameStatus !== 'playing' || gameState !== 'playing' || !gameId) return;
+const rollDice = async () => {
+  if (isRolling || gameStatus !== 'playing' || gameState !== 'playing' || !gameId) return;
 
-    try {
-      setIsRolling(true);
-      setCurrentRoll(currentRoll + 1);
+  try {
+    setIsRolling(true);
+    setCurrentRoll(currentRoll + 1);
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    // Call backend to roll dice FIRST
+    const response = await apiCall('/snake-game/roll', 'POST', {
+      gameId: gameIdRef.current,
+      currentPosition: playerPosition,
+      rollNumber: currentRoll + 1
+    });
+
+    if (!response.success) {
+      Alert.alert('Error', 'Failed to roll dice');
+      setIsRolling(false);
+      return;
+    }
+
+    const newDiceValue = response.diceValue;
+    
+    // Animate dice with callback to update value when animation completes
+    Animated.sequence([
+      Animated.timing(rollAnimation, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(rollAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Set dice value immediately when animation completes
+      setDiceValue(newDiceValue);
       
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      let newPosition = playerPosition + newDiceValue;
       
-      // Animate dice
-      Animated.sequence([
-        Animated.timing(rollAnimation, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rollAnimation, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Call backend to roll dice
-      const response = await apiCall('/snake-game/roll', 'POST', {
-        gameId: gameIdRef.current,
-        currentPosition: playerPosition,
-        rollNumber: currentRoll + 1
-      });
-
-      if (!response.success) {
-        Alert.alert('Error', 'Failed to roll dice');
-        setIsRolling(false);
+      // Check if player reaches or exceeds 100 - INSTANT WIN
+      if (newPosition >= 100) {
+        newPosition = 100;
+        
+        // Animate step by step to 100
+        animateStepByStepMovement(playerPosition, newPosition - playerPosition, () => {
+          setGameStatus('won');
+          
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          
+          setTimeout(() => {
+            finalizeGame({
+              result: 'won',
+              reason: 'reached_finish',
+              finalPosition: 100,
+              rollsUsed: currentRoll + 1
+            });
+          }, 1000);
+          
+          setIsRolling(false);
+        });
         return;
       }
-
-      setTimeout(() => {
-        const newDiceValue = response.diceValue;
-        setDiceValue(newDiceValue);
+      
+      // Check for snakes - IMMEDIATE LOSS
+      if (SNAKES[newPosition]) {
+        const snakeEnd = SNAKES[newPosition];
+        setMoveHistory(prev => [...prev, {
+          roll: currentRoll + 1,
+          dice: newDiceValue,
+          from: playerPosition,
+          to: newPosition,
+          snake: snakeEnd,
+          type: 'snake'
+        }]);
         
-        let newPosition = playerPosition + newDiceValue;
-        
-        // Check if player reaches or exceeds 100 - INSTANT WIN
-        if (newPosition >= 100) {
-          newPosition = 100;
-          
-          // Animate step by step to 100
-          animateStepByStepMovement(playerPosition, newPosition - playerPosition, () => {
-            setGameStatus('won');
+        // Move step by step to snake position, then animate transfer
+        animateStepByStepMovement(playerPosition, newDiceValue, () => {
+          animateTransfer('snake', () => {
+            setPlayerPosition(snakeEnd);
             
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Snake bite = immediate game over
+            setGameStatus('lost');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             
             setTimeout(() => {
               finalizeGame({
-                result: 'won',
-                reason: 'reached_finish',
-                finalPosition: 100,
+                result: 'lost',
+                reason: 'snake_bite',
+                finalPosition: snakeEnd,
                 rollsUsed: currentRoll + 1
               });
-            }, 1000);
+            }, 500);
             
             setIsRolling(false);
           });
-          return;
-        }
+        });
+      }
+      // Check for ladders
+      else if (LADDERS[newPosition]) {
+        const ladderEnd = LADDERS[newPosition];
+        setMoveHistory(prev => [...prev, {
+          roll: currentRoll + 1,
+          dice: newDiceValue,
+          from: playerPosition,
+          to: newPosition,
+          ladder: ladderEnd,
+          type: 'ladder'
+        }]);
         
-        // Check for snakes - IMMEDIATE LOSS
-        if (SNAKES[newPosition]) {
-          const snakeEnd = SNAKES[newPosition];
-          setMoveHistory(prev => [...prev, {
-            roll: currentRoll + 1,
-            dice: newDiceValue,
-            from: playerPosition,
-            to: newPosition,
-            snake: snakeEnd,
-            type: 'snake'
-          }]);
-          
-          // Move step by step to snake position, then animate transfer
-          animateStepByStepMovement(playerPosition, newDiceValue, () => {
-            animateTransfer('snake', () => {
-              setPlayerPosition(snakeEnd);
-              
-              // Snake bite = immediate game over
-              setGameStatus('lost');
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              
-              setTimeout(() => {
-                finalizeGame({
-                  result: 'lost',
-                  reason: 'snake_bite',
-                  finalPosition: snakeEnd,
-                  rollsUsed: currentRoll + 1
-                });
-              }, 500);
-              
-              setIsRolling(false);
-            });
-          });
-        }
-        // Check for ladders
-        else if (LADDERS[newPosition]) {
-          const ladderEnd = LADDERS[newPosition];
-          setMoveHistory(prev => [...prev, {
-            roll: currentRoll + 1,
-            dice: newDiceValue,
-            from: playerPosition,
-            to: newPosition,
-            ladder: ladderEnd,
-            type: 'ladder'
-          }]);
-          
-          // Move step by step to ladder position, then animate transfer
-          animateStepByStepMovement(playerPosition, newDiceValue, () => {
-            animateTransfer('ladder', () => {
-              setPlayerPosition(ladderEnd);
-              
-              // After ladder, check if we reached 100 - INSTANT WIN
-              if (ladderEnd >= 100) {
-                setGameStatus('won');
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                
-                setTimeout(() => {
-                  finalizeGame({
-                    result: 'won',
-                    reason: 'reached_finish',
-                    finalPosition: 100,
-                    rollsUsed: currentRoll + 1
-                  });
-                }, 1000);
-              }
-              // ADD THIS: Check if this was the last roll and user survived
-              else if (currentRoll + 1 >= mode.rolls) {
-                setGameStatus('won');
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);            
-                setTimeout(() => {
-                  finalizeGame({
-                    result: 'won',
-                    reason: 'survived_all_rolls',
-                    finalPosition: ladderEnd,
-                    rollsUsed: currentRoll + 1
-                  });
-                }, 1000);
-                }
-
-                setIsRolling(false);
-              });
-              
-              setIsRolling(false);
-            });
-        }
-
-        // Normal move
-        else {
-          setMoveHistory(prev => [...prev, {
-            roll: currentRoll + 1,
-            dice: newDiceValue,
-            from: playerPosition,
-            to: newPosition,
-            type: 'normal'
-          }]);
-          
-          // Move step by step for normal moves
-          animateStepByStepMovement(playerPosition, newDiceValue, () => {
-            // Check if max rolls reached - SURVIVAL WIN if no snake bite
-            if (currentRoll + 1 >= mode.rolls) {
-              setGameStatus('won'); // CHANGED: Now this is a WIN, not a loss
+        // Move step by step to ladder position, then animate transfer
+        animateStepByStepMovement(playerPosition, newDiceValue, () => {
+          animateTransfer('ladder', () => {
+            setPlayerPosition(ladderEnd);
+            
+            // After ladder, check if we reached 100 - INSTANT WIN
+            if (ladderEnd >= 100) {
+              setGameStatus('won');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               
               setTimeout(() => {
                 finalizeGame({
                   result: 'won',
-                  reason: 'survived_all_rolls',
-                  finalPosition: newPosition,
+                  reason: 'reached_finish',
+                  finalPosition: 100,
                   rollsUsed: currentRoll + 1
                 });
-              }, 1500);
+              }, 1000);
             }
-            
+            // Check if this was the last roll and user survived
+            else if (currentRoll + 1 >= mode.rolls) {
+              setGameStatus('won');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);            
+              setTimeout(() => {
+                finalizeGame({
+                  result: 'won',
+                  reason: 'survived_all_rolls',
+                  finalPosition: ladderEnd,
+                  rollsUsed: currentRoll + 1
+                });
+              }, 1000);
+            }
+
             setIsRolling(false);
           });
-        }
-      }, 900);
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to roll dice');
-      console.error('Error rolling dice:', error);
-      setIsRolling(false);
-    }
-  };
+        });
+      }
+      // Normal move
+      else {
+        setMoveHistory(prev => [...prev, {
+          roll: currentRoll + 1,
+          dice: newDiceValue,
+          from: playerPosition,
+          to: newPosition,
+          type: 'normal'
+        }]);
+        
+        // Move step by step for normal moves
+        animateStepByStepMovement(playerPosition, newDiceValue, () => {
+          // Check if max rolls reached - SURVIVAL WIN if no snake bite
+          if (currentRoll + 1 >= mode.rolls) {
+            setGameStatus('won');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            
+            setTimeout(() => {
+              finalizeGame({
+                result: 'won',
+                reason: 'survived_all_rolls',
+                finalPosition: newPosition,
+                rollsUsed: currentRoll + 1
+              });
+            }, 1500);
+          }
+          
+          setIsRolling(false);
+        });
+      }
+    });
+
+  } catch (error) {
+    Alert.alert('Error', error.message || 'Failed to roll dice');
+    console.error('Error rolling dice:', error);
+    setIsRolling(false);
+  }
+};
 
   const getCellPosition = (number) => {
     for (let row = 0; row < BOARD_SIZE; row++) {
@@ -710,7 +708,12 @@ export default function SnakeGameScreen() {
 
   const getDiceRotation = rollAnimation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '720deg'],
+    outputRange: ['0deg', '1080deg'],
+  });
+
+  const getDiceScale = rollAnimation.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.2, 1],
   });
 
   const getTransferScale = transferAnimation.interpolate({
@@ -1008,14 +1011,42 @@ export default function SnakeGameScreen() {
             <Animated.View
               style={[
                 styles.dice,
-                { transform: [{ rotate: getDiceRotation }] }
+                { 
+                  transform: [
+                    { rotate: getDiceRotation },
+                    { scale: getDiceScale }
+                  ] 
+                }
               ]}
             >
-              <Text style={styles.diceText}>
-                {getDiceFace(diceValue)}
-              </Text>
+              <LinearGradient
+                colors={['#FFFFFF', '#F0F0F0', '#E0E0E0']}
+                style={styles.diceGradient}
+              >
+                <Text style={styles.diceText}>
+                  {getDiceFace(diceValue)}
+                </Text>
+                <View style={styles.diceShadow} />
+              </LinearGradient>
             </Animated.View>
-            <Text style={styles.diceValue}>Value: {diceValue}</Text>
+            
+            {/* Only show dice value when not rolling */}
+            {!isRolling && (
+              <Animated.View
+                style={[
+                  styles.diceValueContainer,
+                  {
+                    opacity: isRolling ? 0 : 1,
+                    transform: [
+                      { translateY: isRolling ? 10 : 0 },
+                      { scale: isRolling ? 0.8 : 1 }
+                    ]
+                  }
+                ]}
+              >
+                <Text style={styles.diceValue}>Value: {diceValue}</Text>
+              </Animated.View>
+            )}
           </View>
           
           <TouchableOpacity
@@ -1252,24 +1283,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 8,
   },
-  playAgainButton: {
-    flex: 1,
-    borderRadius: 15,
-    overflow: 'hidden',
-  },
-  resultButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-  },
-  playAgainText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 8,
-  },
 
   header: {
     flexDirection: 'row',
@@ -1446,23 +1459,59 @@ const styles = StyleSheet.create({
   diceContainer: {
     alignItems: 'center',
     marginBottom: 15,
+    paddingVertical: 10,
   },
   dice: {
-    width: 60,
-    height: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
+    width: 70,
+    height: 70,
+    borderRadius: 15,
+    marginBottom: 12,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  diceGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#D0D0D0',
+    position: 'relative',
+    overflow: 'hidden',
   },
   diceText: {
-    fontSize: 30,
+    fontSize: 35,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    zIndex: 2,
+  },
+  diceShadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 13,
+  },
+  diceValueContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   diceValue: {
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '600',
+    textAlign: 'center',
   },
   rollButton: {
     borderRadius: 12,
