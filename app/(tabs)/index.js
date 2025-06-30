@@ -10,7 +10,8 @@ import {
   Alert,
   ActivityIndicator,
   BackHandler,
-  FlatList
+  FlatList,
+  Image
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -29,63 +30,62 @@ const STAKES = [10, 30, 50, 100, 500, 1000];
 const gameRules = [
   {
     id: 'six-king',
-    title: '6 King Multiplayer',
+    title: '6 किंग मल्टीप्लेयर',
     icon: 'casino',
     gradient: ['#FF6B6B', '#FF8E53'],
     rules: [
-      '🎯 Play against real opponents',
-      '🎲 First turn is randomly decided',
-      '👑 First to get 3 sixes wins',
-      '💰 Winner takes 2x stake',
-      '⚡ Instant matchmaking'
+      '🎯 असली खिलाड़‍ियों के साथ मुकाबला',
+      '🎲 पहला चाल किसे मिलेगी तय होगा किस्मत से',
+      '👑 जो पहले 3 बार 6 ले आए वही बनेगा किंग',
+      '💰 जीतने पर मिलेगा दुगना पैसा (2x)',
+      '⚡ मैच तुरंत शुरू हो जाता है'
     ],
-    badge: 'LIVE',
+    badge: 'लाइव',
     badgeColor: '#2ECC71'
   },
   {
     id: 'lucky-number',
-    title: 'Lucky Number',
+    title: 'लकी नंबर',
     icon: 'stars',
     gradient: ['#4ECDC4', '#44A08D'],
     rules: [
-      '🔢 Choose your lucky number (1-6)',
-      '🎲 Get 2 chances to roll it',
-      '🍀 Higher chances of success',
-      '💎 Win 2.5x your stake',
-      '⭐ Single player game'
+      '🔢 1 से 6 तक कोई एक नंबर चुनो',
+      '🎲 नंबर लाने के मिलेंगे 2 मौके',
+      '🍀 जीतने के ज्यादा चांस',
+      '💎 जीतने पर 2.5 गुना पैसा मिलेगा',
+      '⭐ अकेले खेलो, खुद की किस्मत आज़माओ'
     ],
-    badge: 'SOLO',
+    badge: 'अकेला',
     badgeColor: '#4ECDC4'
   },
   {
     id: 'matka-king',
-    title: 'Matka King',
+    title: 'मटका किंग',
     icon: 'schedule',
     gradient: ['#8B5CF6', '#7C3AED'],
     rules: [
-      '⏰ Play in specific time slots',
-      '🔢 Pick a number (0-9)',
-      '🏆 10x payout if you win',
-      '📅 Multiple slots daily',
-      '👥 Minimum 25 players required'
+      '⏰ तय समय पर ही खेल होगा',
+      '🔢 0 से 9 तक कोई एक नंबर चुनो',
+      '🏆 सही नंबर आया तो 10 गुना इनाम!',
+      '📅 हर दिन कई बार खेलने का मौका',
+      '👥 कम से कम 25 खिलाड़ी ज़रूरी'
     ],
-    badge: 'SLOTS',
+    badge: 'स्लॉट',
     badgeColor: '#8B5CF6'
   },
   {
     id: 'snake-king',
-    title: 'Snake King',
+    title: 'सांप किंग',
     icon: 'bug-report',
     gradient: ['#4E9525', '#2B5E20'],
     rules: [
-      '🐍 Avoid snakes on the board',
-      '🪜 Ladders boost your winnings',
-      '💸 Easy money in just 5-15 rolls',
-      '🔥 Win up to 15x your stake!',
-      '⚡ Pick your risk, pick your reward'
-
+      '🐍 बोर्ड पर सांप से बचो वरना नीचे गिरोगे',
+      '🪜 सीढ़ियाँ मिलेंगी तो ऊपर जाओगे',
+      '💸 सिर्फ़ 5-15 रोल में जीत का मौका',
+      '🔥 15 गुना तक जीत सकते हो!',
+      '⚡ खतरा तुम्हारा, इनाम भी तुम्हारा'
     ],
-    badge: 'BOARD',
+    badge: 'बोर्ड',
     badgeColor: '#4E9525'
   }
 ];
@@ -112,41 +112,53 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // Updated games data with better content organization
   const games = [
     {
       id: 'six-king',
       title: '6 King',
-      description: 'Battle with \nOnline Opponents\nFirst to get 3 sixes wins!',
+      description: '3 बार 6 लाओ, बाज़ी जीतो! 🎲👑',
       icon: 'casino',
       gradient: ['#FF6B6B', '#FF8E53'],
       multiplier: '2x',
+      multiplierHint: '2 गुना पैसा! 💰',
       isMultiplayer: true,
-      badge: 'MULTIPLAYER'
+      badge: 'मल्टीप्लेयर',
+      players: '500+ खिलाड़ी ऑनलाइन'
     },
     {
       id: 'lucky-number',
       title: 'Lucky Number',
-      description: 'Choose your lucky number\nRoll twice to win big!',
+      description: 'लकी नंबर चुनो, बड़ा इनाम पाओ! 🍀🎯',
       icon: 'stars',
       gradient: ['#4ECDC4', '#44A08D'],
-      multiplier: '2.5x'
+      multiplier: '2.5x',
+      multiplierHint: '2.5 गुना कमाई! 💸',
+      badge: 'सोलो',
+      players: 'अकेले खेलें'
     },
     {
       id: 'matka-king',
       title: 'Matka King',
-      description: 'Play in time slots\nWin 10x your stake!',
+      description: 'सही नंबर चुना तो सीधा 10 गुना! 💥💰',
       icon: 'schedule',
       gradient: ['#8B5CF6', '#7C3AED'],
       multiplier: '10x',
+      multiplierHint: 'सीधा 10 गुना पैसा! 🔥',
       isMultiplayer: true,
+      badge: 'टाइम स्लॉट',
+      players: 'हर घंटे नया गेम'
     },
     {
       id: 'snake-king',
       title: 'Snake King',
-      description: 'Beat snakes \nWin upto 16x your stake!',
+      description: 'सांप से बचो, सीढ़ी से चढ़ो, जीत पक्की! 🐍🪜',
       icon: 'bug-report',
       gradient: ['#4E9525', '#2B5E20'],
-      multiplier: '2x - 16x'
+      multiplier: '2x - 16x',
+      multiplierHint: 'कम से कम डबल, ज़्यादा से ज़्यादा 16 गुना! 😲',
+      badge: 'एडवेंचर',
+      players: 'रोमांच भरा गेम'
     }
   ];
 
@@ -170,7 +182,7 @@ export default function HomeScreen() {
         });
         setCurrentRuleIndex(nextIndex);
       }
-    }, 4000); // Auto-scroll every 4 seconds
+    }, 30000); // Auto-scroll every 4 seconds
 
     return () => clearInterval(interval);
   }, [currentRuleIndex, showGames]);
@@ -204,6 +216,71 @@ export default function HomeScreen() {
       // Normal scroll within bounds
       setCurrentRuleIndex(index - 1);
     }
+  };
+
+  
+  // Game Card Component with removed icons and adjusted layout
+  const GameCardComponent = ({ game }) => {
+    return (
+      <TouchableOpacity
+        style={styles.gameCard}
+        onPress={() => handleGameSelect(game)}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={[...game.gradient, 'rgba(0, 0, 0, 0.1)']}
+          style={styles.gameCardGradient}
+        >
+          <View style={styles.gameCardContent}>
+            {/* Badge */}
+            {/* <View style={[
+              styles.gameBadge,
+              game.isMultiplayer ? styles.multiplayerBadge : styles.soloBadge
+            ]}>
+              <MaterialIcons 
+                name={game.isMultiplayer ? "people" : "person"} 
+                size={12} 
+                color="#1a1a2e" 
+              />
+              <Text style={styles.badgeText}>{game.badge}</Text>
+            </View> */}
+            
+            {/* Header Section - No Icon Container */}
+            <View style={styles.gameHeader}>
+              <Text style={styles.gameTitle}>{game.title}</Text>
+            </View>
+            
+            {/* Description */}
+            <Text style={styles.gameDescription}>{game.description}</Text>
+            
+            {/* Middle Section - Multiplier */}
+            <View style={styles.gameMiddleSection}>
+              <View style={styles.multiplierContainer}>
+                <Text style={styles.multiplierText}>{game.multiplier}</Text>
+              </View>
+              <Text style={styles.multiplierHint}>{game.multiplierHint}</Text>
+            </View>
+            
+            {/* Footer Section */}
+            <View style={styles.gameFooter}>
+              <Text style={styles.playersInfo}>{game.players}</Text>
+              
+              {game.isMultiplayer && (
+                <View style={styles.onlineIndicator}>
+                  <View style={styles.onlineDot} />
+                  <Text style={styles.onlineText}>LIVE</Text>
+                </View>
+              )}
+              
+              {/* Quick Play Button */}
+              <TouchableOpacity style={styles.quickPlayButton}>
+                <Text style={styles.quickPlayText}>खेलें →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
   };
 
   // Game Rules Card Component with enhanced styling
@@ -428,17 +505,27 @@ export default function HomeScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.welcomeText}>Welcome back!</Text>
-          <Text style={styles.emailText}>{email}</Text>
-          
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#FFD700" />
-          ) : (
-            <View style={styles.balanceContainer}>
-              <MaterialIcons name="account-balance-wallet" size={20} color="#FFD700" />
-              <Text style={styles.balanceText}>₹{balance}</Text>
+          <View style={styles.headerTop}>
+            <View style={styles.appBranding}>
+              <Image 
+                source={require('../../assets/icon.png')} // Put your image file here
+                style={styles.appIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.appName}>BetBoss</Text>
             </View>
-          )}
+            
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFD700" />
+            ) : (
+              <TouchableOpacity style={styles.walletContainer}>
+                <MaterialIcons name="account-balance-wallet" size={18} color="#FFD700" />
+                <Text style={styles.balanceText}>₹{balance}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <Text style={styles.tagline}>🎯 खेलो, जीतो और राज करो! 👑</Text>
         </View>
         
         {/* Conditional Content Based on Flow */}
@@ -447,8 +534,7 @@ export default function HomeScreen() {
             {/* Hero Section */}
             <View style={styles.heroSection}>
               <View style={styles.heroContent}>
-                <Text style={styles.heroTitle}>Ready to Play?</Text>
-                <Text style={styles.heroSubtitle}>Choose your game and start winning!</Text>
+                <Text style={styles.heroTitle}>Game चुनो, पैसा बनाओ! 💰</Text>
               </View>
             </View>
 
@@ -456,49 +542,7 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <View style={styles.gamesContainer}>
                 {games.map((game) => (
-                  <TouchableOpacity
-                    key={game.id}
-                    style={styles.gameCard}
-                    onPress={() => handleGameSelect(game)}
-                  >
-                    <LinearGradient
-                      colors={game.gradient}
-                      style={styles.gameCardGradient}
-                    >
-                      <View style={styles.gameCardContent}>
-                        {game.badge && (
-                          <View style={[
-                            styles.gameBadge,
-                            game.isMultiplayer ? styles.multiplayerBadge : styles.soloBadge
-                          ]}>
-                            <MaterialIcons 
-                              name={game.isMultiplayer ? "people" : "person"} 
-                              size={12} 
-                              color="#fff" 
-                            />
-                            <Text style={styles.badgeText}>{game.badge}</Text>
-                          </View>
-                        )}
-                        
-                        <MaterialIcons name={game.icon} size={40} color="#fff" />
-                        <Text style={styles.gameTitle}>{game.title}</Text>
-                        <Text style={styles.gameDescription}>{game.description}</Text>
-                        
-                        <View style={styles.gameFooter}>
-                          <View style={styles.multiplierBadge}>
-                            <Text style={styles.multiplierText}>{game.multiplier}</Text>
-                          </View>
-                          
-                          {game.isMultiplayer && (
-                            <View style={styles.onlineIndicator}>
-                              <View style={styles.onlineDot} />
-                              <Text style={styles.onlineText}>LIVE</Text>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
+                  <GameCardComponent key={game.id} game={game} />
                 ))}
               </View>
             </View>
@@ -745,36 +789,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
     paddingTop: 50,
+    paddingBottom: 15,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  appBranding: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  welcomeText: {
-    fontSize: 24,
+  appIcon: {
+    width: 50,
+    height: 50,
+    marginRight: 0,
+  },
+  appName: {
+    fontSize: 30,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    color: '#FFD700',
+    marginLeft: 4,
   },
-  emailText: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 15,
-  },
-  balanceContainer: {
+  walletContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: '#FFD700',
   },
   balanceText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#FFD700',
-    marginLeft: 8,
+    marginLeft: 6,
+  },
+  tagline: {
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   section: {
     paddingHorizontal: 20,
@@ -786,95 +846,132 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 15,
   },
+  
+  // Updated Game Cards Styles
   gamesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
   },
   gameCard: {
-    width: (width - 50) / 2,
-    borderRadius: 15,
+    width: (width - 60) / 2, // Adjusted for better spacing
+    borderRadius: 20,
     overflow: 'hidden',
-    elevation: 5,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    marginBottom: 20,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   gameCardGradient: {
     padding: 20,
-    minHeight: 250,
+    minHeight: 300,
+    justifyContent: 'space-between',
   },
   gameCardContent: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     flex: 1,
     position: 'relative',
   },
+  
+  // Badge Styles
   gameBadge: {
     position: 'absolute',
-    top: -10,
-    right: -10,
+    top: -15,
+    right: -15,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 15,
     zIndex: 1,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
   },
   multiplayerBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
   soloBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 215, 0, 0.9)',
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#1a1a2e',
     marginLeft: 4,
+  },
+  
+  // Game Content Sections
+  gameHeader: {
+    alignItems: 'center',
+    marginBottom: 5,
+    marginTop: -5,
   },
   gameTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    marginTop: 10,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   gameDescription: {
-    fontSize: 12,
-    color: '#fff',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
+    marginBottom: 15,
+    paddingHorizontal: 5,
+  },
+  gameMiddleSection: {
+    alignItems: 'center',
     marginBottom: 15,
   },
-  gameFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 10,
-  },
-  multiplierBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+  multiplierContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 8,
   },
   multiplierText: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+    textAlign: 'center',
+  },
+  multiplierHint: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  gameFooter: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  playersInfo: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   onlineIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(46, 204, 113, 0.2)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
+    backgroundColor: 'rgba(46, 204, 113, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 204, 113, 0.5)',
+    marginBottom: 8,
   },
   onlineDot: {
     width: 6,
@@ -884,12 +981,25 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   onlineText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
     color: '#2ECC71',
   },
+  quickPlayButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  quickPlayText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
   
-  // New Game Rules Section Styles
+  // Game Rules Section Styles
   gameRulesSection: {
     marginBottom: 30,
   },
@@ -1017,6 +1127,7 @@ const styles = StyleSheet.create({
     width: 20,
   },
 
+  // Stakes Selection Screen Styles
   stakesScreenContainer: {
     flex: 1,
     paddingTop: 60,
@@ -1134,30 +1245,26 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 10,
   },
-  bottomPadding: {
-    height: 20,
-  },
+  
+  // Hero Section
   heroSection: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 20,
     alignItems: 'center',
   },
   heroContent: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   heroTitle: {
-    fontSize: 28,
+    fontSize: 25,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
     textAlign: 'center',
   },
-  heroSubtitle: {
-    fontSize: 16,
-    color: '#888',
-    textAlign: 'center',
-  },
+  
+  // Features Section
   featuresSection: {
     paddingHorizontal: 20,
     marginBottom: 30,
@@ -1204,6 +1311,8 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
   },
+  
+  // Stats Section
   statsSection: {
     paddingHorizontal: 20,
     marginBottom: 30,
@@ -1239,6 +1348,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     marginHorizontal: 15,
   },
+  
+  // Call to Action Section
   ctaSection: {
     paddingHorizontal: 20,
     marginBottom: 20,
@@ -1262,5 +1373,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
+  },
+  
+  // Bottom Padding
+  bottomPadding: {
+    height: 20,
   },
 });
