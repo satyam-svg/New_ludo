@@ -9,27 +9,33 @@ import {
   Alert,
   Animated,
   Dimensions,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal,
+  BackHandler
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../hooks/useAuth';
+import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 import config from '../../config';
-const API_BASE_URL = `${config.BASE_URL}/api/users`;
+const BASE_URL = config.BASE_URL;
 
 const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000];
 
 export default function WalletScreen() {
   const { user, updateWallet } = useAuth();
-  const [activeTab, setActiveTab] = useState('add'); // add, withdraw
+  const [activeTab, setActiveTab] = useState('add');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState(0);
   const [loadingBalance, setLoadingBalance] = useState(true);
+  const [showWebView, setShowWebView] = useState(false);
+  const [paymentSessionId, setPaymentSessionId] = useState('');
+  const [paymentPageUrl, setPaymentPageUrl] = useState('');
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -41,6 +47,24 @@ export default function WalletScreen() {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  useEffect(() => {
+    if (showWebView) {
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        handleBackButton
+      );
+      return () => backHandler.remove();
+    }
+  }, [showWebView]);
+
+  const handleBackButton = () => {
+    if (showWebView) {
+      setShowWebView(false);
+      return true;
+    }
+    return false;
+  };
 
   const handleTabChange = (tab) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -56,7 +80,7 @@ export default function WalletScreen() {
         return;
       }
       
-      const response = await fetch(API_BASE_URL+"/me", {
+      const response = await fetch(`${BASE_URL}/api/users/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -66,11 +90,10 @@ export default function WalletScreen() {
       
       const userData = await response.json();
       setBalance(userData.wallet);
-      updateWallet(userData.wallet || 0); // Update context
+      updateWallet(userData.wallet || 0);
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch wallet balance');
       console.error(error);
-      // Set a default balance if fetch fails
       setBalance(0);
     } finally {
       setLoadingBalance(false);
@@ -94,7 +117,6 @@ export default function WalletScreen() {
 
     const transactionAmount = parseFloat(amount);
 
-    // Validation for withdraw
     if (activeTab === 'withdraw') {
       if (transactionAmount < 100) {
         Alert.alert('Minimum Withdrawal', 'Minimum withdrawal amount is ₹100');
@@ -104,62 +126,83 @@ export default function WalletScreen() {
         Alert.alert('Insufficient Balance', 'You don\'t have enough balance');
         return;
       }
-    }
+      
+      // Withdraw logic
+      setLoading(true);
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const response = await fetch(`${BASE_URL}/api/wallet/transaction`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            type: 'withdraw',
+            amount: transactionAmount
+          })
+        });
 
-    setLoading(true);
-
-    // Animation for button press
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    try {
-      // Send transaction to backend
-      const token = await AsyncStorage.getItem('userToken');
-      const response = await fetch(API_BASE_URL+'/api/wallet/transaction', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          type: activeTab,
-          amount: transactionAmount
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Transaction failed');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Withdrawal failed');
+        }
+        
+        await fetchWalletBalance();
+        Alert.alert(
+          'Success',
+          `₹${transactionAmount} withdrawn from your wallet successfully!`
+        );
+        setAmount('');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+      } catch (error) {
+        Alert.alert('Error', error.message || 'Withdrawal failed');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setLoading(false);
       }
       
-      // Refresh balance after transaction
-      await fetchWalletBalance();
-      
-      // Success handling
-      Alert.alert(
-        'Success',
-        `₹${transactionAmount} ${activeTab === 'add' ? 'added to' : 'withdrawn from'} your wallet successfully!`
-      );
-      
-      setAmount('');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Transaction failed');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setLoading(false);
+    } else {
+      // Add money logic - Cashfree integration
+      setLoading(true);
+      try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${BASE_URL}/api/payment/create-order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+           body: JSON.stringify({}) 
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Payment initialization failed');
+        
+        setPaymentSessionId(data.paymentSessionId);
+        setPaymentPageUrl(data.paymentPageUrl);
+        setShowWebView(true);
+        
+      } catch (error) {
+        Alert.alert('Error', error.message || 'Failed to initialize payment');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setLoading(false);
+      }
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    setShowWebView(false);
+    fetchWalletBalance();
+    Alert.alert('Success', 'Payment successful! Your wallet has been updated.');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handlePaymentFailure = () => {
+    setShowWebView(false);
+    Alert.alert('Payment Failed', 'Please try again');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
   };
 
   const formatCurrency = (amount) => {
@@ -168,6 +211,39 @@ export default function WalletScreen() {
       currency: 'INR',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const generateCashfreeHTML = (sessionId) => {
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Cashfree Payment</title>
+          <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+        </head>
+        <body>
+          <script>
+            const cashfree = Cashfree({ mode: "sandbox" });
+            const checkoutOptions = {
+              paymentSessionId: "${sessionId}",
+              redirectTarget: "_self"
+            };
+            cashfree.checkout(checkoutOptions);
+            
+            // Listen for payment events
+            cashfree.on("paymentSuccess", function(data) {
+              window.ReactNativeWebView.postMessage("SUCCESS");
+            });
+            
+            cashfree.on("paymentFailure", function(data) {
+              window.ReactNativeWebView.postMessage("FAILURE");
+            });
+          </script>
+        </body>
+      </html>
+    `;
   };
 
   return (
@@ -388,6 +464,46 @@ export default function WalletScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Cashfree Payment WebView */}
+      <Modal
+        visible={showWebView}
+        animationType="slide"
+        onRequestClose={() => setShowWebView(false)}
+      >
+        <View style={styles.webviewContainer}>
+          <View style={styles.webviewHeader}>
+            <TouchableOpacity 
+              onPress={() => setShowWebView(false)}
+              style={styles.closeButton}
+            >
+              <MaterialIcons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.webviewTitle}>Complete Payment</Text>
+          </View>
+          
+          <WebView
+            source={{ html: generateCashfreeHTML(paymentSessionId) }}
+            style={styles.webview}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.loaderContainer}>
+                <ActivityIndicator size="large" color="#4ECDC4" />
+              </View>
+            )}
+            onMessage={(event) => {
+              const message = event.nativeEvent.data;
+              if (message === 'SUCCESS') {
+                handlePaymentSuccess();
+              } else if (message === 'FAILURE') {
+                handlePaymentFailure();
+              }
+            }}
+          />
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -594,5 +710,39 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 20,
+  },
+ webviewContainer: {
+    flex: 1,
+    backgroundColor: '#1a1a2e',
+  },
+  webviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    padding: 15,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a4a',
+  },
+  closeButton: {
+    marginRight: 15,
+  },
+  webviewTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  webview: {
+    flex: 1,
+  },
+  loaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(26, 26, 46, 0.8)',
   },
 });
