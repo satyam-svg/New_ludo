@@ -607,11 +607,27 @@ export default function SnakeGameScreen() {
                   });
                 }, 1000);
               }
+              // ADD THIS: Check if this was the last roll and user survived
+              else if (currentRoll + 1 >= mode.rolls) {
+                setGameStatus('won');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);            
+                setTimeout(() => {
+                  finalizeGame({
+                    result: 'won',
+                    reason: 'survived_all_rolls',
+                    finalPosition: ladderEnd,
+                    rollsUsed: currentRoll + 1
+                  });
+                }, 1000);
+                }
+
+                setIsRolling(false);
+              });
               
               setIsRolling(false);
             });
-          });
         }
+
         // Normal move
         else {
           setMoveHistory(prev => [...prev, {
