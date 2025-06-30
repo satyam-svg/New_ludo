@@ -34,18 +34,21 @@ export default function SixKingLobby() {
   const [connectedPlayers, setConnectedPlayers] = useState(0);
 
   const predefinedStakes = [50, 100, 250, 500, 1000, 2500];
+  const enabledStakes = [100, 1000]; // Only these stakes are enabled
+  
   useEffect(() => {
-  const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
-      return () => {
-        backHandler.remove();
-      };
-    }, []);
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
+    return () => {
+      backHandler.remove();
+    };
+  }, []);
 
   const { isConnected, sendMessage, disconnect, connectionError } = useWebSocket({
     onMessage: handleWebSocketMessage,
     onConnect: handleSocketConnect,
     onDisconnect: handleSocketDisconnect
   });
+  
   function handleSocketConnect() {
     console.log('✅ Connected to Six King lobby');
     setLobbyState('menu');
@@ -58,54 +61,67 @@ export default function SixKingLobby() {
   }
 
   function handleWebSocketMessage(message) {
-  const { type, data } = message;
-  console.log('📨 Lobby message received:', type, data);
+    const { type, data } = message;
+    console.log('📨 Lobby message received:', type, data);
 
-  switch (type) {
-    case 'connected':
-      console.log('Welcome message:', data.message);
-      break;
-      
-    case 'game_created':
-      handleGameCreated(data);
-      break;
-      
-    case 'game_joined':
-      handleGameJoined(data);
-      break;
-      
-    case 'player_joined':
-      handlePlayerJoined(data);
-      break;
-      
-    case 'game_matched':
-      handleGameMatched(data);
-      break;
-      
-    case 'game_started':
-      handleGameStarted(data);
-      break;
-      
-    case 'queued':
-      handleQueued(data);
-      break;
-      
-    case 'error':
-      handleError(data);
-      break;
-      
-    // Game messages - forward to global state for game screen
-    case 'dice_rolled':
-    case 'turn_changed':
-    case 'game_ended':
-      console.log(`Game message ${type} received in lobby - will be handled by game screen`);
-      // Game screen will receive this message too via the shared WebSocket
-      break;
-      
-    default:
-      console.log('Unknown message type:', type);
+    switch (type) {
+      case 'connected':
+        console.log('Welcome message:', data.message);
+        break;
+        
+      case 'game_created':
+        handleGameCreated(data);
+        break;
+        
+      case 'game_joined':
+        handleGameJoined(data);
+        break;
+        
+      case 'player_joined':
+        handlePlayerJoined(data);
+        break;
+        
+      case 'game_matched':
+        handleGameMatched(data);
+        break;
+        
+      case 'game_started':
+        handleGameStarted(data);
+        break;
+        
+      case 'queued':
+        handleQueued(data);
+        break;
+        
+      case 'error':
+        handleError(data);
+        break;
+        
+      // Game messages - forward to global state for game screen
+      case 'dice_rolled':
+      case 'turn_changed':
+      case 'game_ended':
+        console.log(`Game message ${type} received in lobby - will be handled by game screen`);
+        // Game screen will receive this message too via the shared WebSocket
+        break;
+        
+      default:
+        console.log('Unknown message type:', type);
+    }
   }
-}
+
+  function handleGameCreated(data) {
+    setLobbyState('waiting');
+    setCreatedGameCode(data.gameId);
+    setWaitingMessage('Waiting for opponent to join...');
+    setIsLoading(false);
+  }
+
+  function handleGameJoined(data) {
+    setLobbyState('waiting');
+    setWaitingMessage('Joined successfully! Waiting for game to start...');
+    setIsLoading(false);
+  }
 
   function handleGameStarted(data) {
     console.log('🎮 Game started from lobby, navigating immediately...', data);
@@ -149,7 +165,6 @@ export default function SixKingLobby() {
       }
     }, 1000);
   }
-
 
   function handleQueued(data) {
     setLobbyState('waiting');
@@ -285,30 +300,35 @@ export default function SixKingLobby() {
     setConnectedPlayers(0);
   };
 
-  const renderStakeOption = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.stakeOption,
-        selectedStake === item && styles.stakeOptionSelected
-      ]}
-      onPress={() => {
-        setSelectedStake(item);
-        setCustomStake('');
-      }}
-    >
-      <LinearGradient
-        colors={selectedStake === item ? ['#6366F1', '#8B5CF6'] : ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.1)']}
-        style={styles.stakeOptionGradient}
+  const renderStakeOption = ({ item }) => {
+    const isEnabled = enabledStakes.includes(item);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.stakeOption,
+          selectedStake === item && styles.selectedStake,
+          !isEnabled && styles.disabledStake
+        ]}
+        onPress={() => isEnabled && setSelectedStake(item)}
+        disabled={!isEnabled}
       >
         <Text style={[
-          styles.stakeOptionText,
-          selectedStake === item && styles.stakeOptionTextSelected
+          styles.stakeText,
+          selectedStake === item && styles.selectedStakeText,
+          !isEnabled && styles.disabledStakeText
         ]}>
           ₹{item}
         </Text>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
+        {!isEnabled && (
+          <View style={styles.lockContainer}>
+            <MaterialIcons name="lock" size={16} color="#9CA3AF" />
+            <Text style={styles.comingSoonText}>Soon</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   // Waiting screen
   if (lobbyState === 'waiting' || lobbyState === 'creating' || lobbyState === 'joining' || lobbyState === 'matched') {
@@ -629,40 +649,58 @@ const styles = StyleSheet.create({
   stakeContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
-    padding: 16,
+    padding: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   stakeGrid: {
-    maxHeight: 140,
+    maxHeight: 200,
   },
   stakeGridContent: {
     justifyContent: 'space-between',
   },
   stakeOption: {
     flex: 1,
-    margin: 4,
+    margin: 5,
+    padding: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 2,
-  },
-  stakeOptionGradient: {
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
-    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 70,
   },
-  stakeOptionSelected: {
-    transform: [{ scale: 1.05 }],
+  selectedStake: {
+    backgroundColor: '#6366F1',
+    borderColor: '#6366F1',
   },
-  stakeOptionText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '600',
-    fontSize: 16,
+  disabledStake: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    opacity: 0.6,
   },
-  stakeOptionTextSelected: {
+  stakeText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#fff',
-    fontWeight: '800',
+  },
+  selectedStakeText: {
+    color: '#FFFFFF',
+  },
+  disabledStakeText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  lockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  comingSoonText: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.4)',
+    marginLeft: 2,
+    fontWeight: '500',
   },
   gameOption: {
     borderRadius: 20,

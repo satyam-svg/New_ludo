@@ -25,6 +25,7 @@ const GAME_MODES = [
     multiplier: 2, 
     name: 'Easy Survivor', 
     description: 'Perfect for beginners • Quick 5-roll challenge',
+    descriptionHindi: '5 चाल चले, साँप ने नहीं काटा? जीत गए और 2 गुना ले जाओ!',
     emoji: '🛡️',
     gradient: ['rgba(78, 205, 196, 0.8)', 'rgba(68, 160, 141, 0.9)', 'rgba(26, 26, 46, 0.3)'],
     difficulty: 'EASY',
@@ -35,6 +36,7 @@ const GAME_MODES = [
     multiplier: 4, 
     name: 'Daredevil', 
     description: 'For brave players • 8 rolls of excitement',
+    descriptionHindi: '8 चालों तक साँप से बचे? 4 गुना इनाम आपका!',
     emoji: '⚡',
     gradient: ['rgba(255, 215, 0, 0.7)', 'rgba(255, 165, 0, 0.8)', 'rgba(26, 26, 46, 0.4)'],
     difficulty: 'MEDIUM',
@@ -45,6 +47,7 @@ const GAME_MODES = [
     multiplier: 8, 
     name: 'Snake Master', 
     description: 'High risk, high reward • 12-roll marathon',
+    descriptionHindi: '12 चालें बिना डसे गए? आप हो असली Snake Master • 8 गुना जीत पक्की!',
     emoji: '🔥',
     gradient: ['rgba(255, 107, 107, 0.7)', 'rgba(255, 142, 83, 0.8)', 'rgba(26, 26, 46, 0.4)'],
     difficulty: 'HARD',
@@ -55,6 +58,7 @@ const GAME_MODES = [
     multiplier: 16, 
     name: 'Legendary', 
     description: 'Only for the fearless • Ultimate 15-roll test',
+    descriptionHindi: '15 बार चले और एक बार भी साँप ने नहीं काटा? आप लिजेंड हैं! 16 गुना जीत लो!',
     emoji: '💎',
     gradient: ['rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.8)', 'rgba(26, 26, 46, 0.4)'],
     difficulty: 'EXTREME',
@@ -126,6 +130,8 @@ export default function ModeSelectionScreen({ navigation }) {
           </View>
           
           <Text style={styles.modeDescription}>{mode.description}</Text>
+          <Text style={styles.modeDescription}>{mode.descriptionHindi}</Text>
+
           
           <View style={styles.modeFooter}>
             <View style={styles.multiplierContainer}>

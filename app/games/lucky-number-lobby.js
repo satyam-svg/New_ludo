@@ -272,8 +272,8 @@ export default function LuckyNumberLobby() {
               {/* </View> */}
               <Text style={styles.heroTitle}>🎯 Choose Your Lucky Number!</Text>
               <Text style={styles.heroDescription}>
-                Pick the number that speaks to your soul.{'\n'}
-                You'll get 2 magical rolls to make it happen! ✨
+                तुम्हें पासा फेंकने के मिलेंगे 2 मौके।{'\n'}
+                अगर लकी नंबर आ गया, तो सीधी जीत! 🎯
               </Text>
             </LinearGradient>
           </View>
