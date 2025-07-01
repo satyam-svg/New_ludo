@@ -19,6 +19,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 
 const { width, height } = Dimensions.get('window');
+import config from '../../config';
+const API_BASE_URL = `${config.BASE_URL}/api`;
 
 // Responsive dimensions
 const isSmallDevice = width < 380;
@@ -33,8 +35,8 @@ const scale = (size) => {
 };
 
 // Timer constants
-const ROLL_TIMEOUT_SECONDS = 120; // 1 minute timeout
-const WARNING_THRESHOLD = 20; // Show warning when 15 seconds left
+const ROLL_TIMEOUT_SECONDS = 120; // 2 minute timeout
+const WARNING_THRESHOLD = 20; // Show warning when 20 seconds left
 
 export default function SixKingGame() {
   const { stake, gameId, firstPlayer, players, gameStarted } = useLocalSearchParams();
@@ -52,7 +54,7 @@ export default function SixKingGame() {
   const [rollCount, setRollCount] = useState(0);
   const [isProcessingTurn, setIsProcessingTurn] = useState(false);
   
-  // state
+  // Timer state
   const [timeLeft, setTimeLeft] = useState(ROLL_TIMEOUT_SECONDS);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
@@ -64,22 +66,58 @@ export default function SixKingGame() {
 
   // Game end modal state
   const [showGameEndModal, setShowGameEndModal] = useState(false);
-  const [gameEndResult, setGameEndResult] = useState(null); // { isWinner: boolean, amount: number }
+  const [gameEndResult, setGameEndResult] = useState(null);
 
   // Multiplayer state
   const [roomCode, setRoomCode] = useState(gameId || null);
   const [waitingForOpponent, setWaitingForOpponent] = useState(true);
   const [gameReady, setGameReady] = useState(false);
   const [opponentId, setOpponentId] = useState(null);
-  const [matchStatus, setMatchStatus] = useState(''); // For showing match status without popup
+  const [matchStatus, setMatchStatus] = useState('');
 
-  // WebSocket connection (update connection for game)
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [selectedAdminDice, setSelectedAdminDice] = useState(null);
+  const [adminMode, setAdminMode] = useState(false);
+
+  
+
+  const apiCall = async (endpoint, method = 'GET', body = null) => {
+    try {
+      const config = {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+
+      if (body) {
+        config.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'API request failed');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('API Error:', error);
+      throw error;
+    }
+  };
+
+  // WebSocket connection
   const { socket, isConnected, sendMessage } = useWebSocket({
     onMessage: handleWebSocketMessage,
     onConnect: () => {
       console.log('🔌 Game WebSocket connected');
       
-      // If we have game data from navigation, update the backend connection
+      // Check admin status when connected
+      checkAdminStatus();
+      
       if (gameStarted === 'true' && roomCode && user.id) {
         console.log('🔄 Updating backend WebSocket connection for game');
         sendMessage('update_connection', {
@@ -101,25 +139,57 @@ export default function SixKingGame() {
   const glowAnim = useRef(new Animated.Value(0)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const timerPulse = useRef(new Animated.Value(1)).current;
+  const adminPanelSlide = useRef(new Animated.Value(-height)).current;
 
-  // Timer functions
+  // ===== NEW: ADMIN FUNCTIONS =====
+  const checkAdminStatus = async () => {
+    try {
+      const response = await apiCall(`/check/${user.id}`, 'GET');
+      setIsAdmin(response);
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+    }
+  };
+
+  const toggleAdminPanel = () => {
+    const toValue = showAdminPanel ? -height : 0;
+    setShowAdminPanel(!showAdminPanel);
+    
+    Animated.spring(adminPanelSlide, {
+      toValue,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
+
+  const selectAdminDice = (value) => {
+    setSelectedAdminDice(value);
+    setAdminMode(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const disableAdminMode = () => {
+    setAdminMode(false);
+    setSelectedAdminDice(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  // Timer functions (keeping existing code)
   const startTimer = (playerId) => {
     console.log(`⏰ Starting timer for player: ${playerId}`);
-    clearTimer(); // Clear any existing timer
+    clearTimer();
     
     setTimeLeft(ROLL_TIMEOUT_SECONDS);
     setIsTimerActive(true);
     setShowTimeoutWarning(false);
     
-    // Start countdown
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
         const newTime = prev - 1;
         
-        // Show warning when time is running low
         if (newTime <= WARNING_THRESHOLD && newTime > 0) {
           setShowTimeoutWarning(true);
-          // Start timer pulse animation
           Animated.loop(
             Animated.sequence([
               Animated.timing(timerPulse, {
@@ -136,7 +206,6 @@ export default function SixKingGame() {
           ).start();
         }
         
-        // Time up!
         if (newTime <= 0) {
           handleTimeUp(playerId);
           return 0;
@@ -163,56 +232,51 @@ export default function SixKingGame() {
   };
 
   const handleTimeUp = (playerId) => {
-      console.log(`⏰ Time up for player: ${playerId}`);
-      clearTimer();
+    console.log(`⏰ Time up for player: ${playerId}`);
+    clearTimer();
+    
+    const currentPlayerId = user.id || initializePlayerId();
+    const isMyTimeout = String(playerId) === String(currentPlayerId);
+    
+    if (isMyTimeout) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setMatchStatus('Time up! You lose...');
       
-      const currentPlayerId = user.id || initializePlayerId();
-      const isMyTimeout = String(playerId) === String(currentPlayerId);
+      setTimeout(() => {
+        setGameEndResult({
+          isWinner: false,
+          amount: parseInt(stake),
+          stake: parseInt(stake),
+          reason: 'timeout'
+        });
+        setShowGameEndModal(true);
+        setGameState('finished');
+      }, 500);
       
-      if (isMyTimeout) {
-        // I timed out - I lose
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setMatchStatus('Time up! You lose...');
-        
-        // Show game end modal FIRST
-        setTimeout(() => {
-          setGameEndResult({
-            isWinner: false,
-            amount: parseInt(stake),
-            stake: parseInt(stake),
-            reason: 'timeout'
-          });
-          setShowGameEndModal(true);
-          setGameState('finished');
-        }, 500);
-        
-      } else {
-        // Opponent timed out - I win
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setMatchStatus('Opponent timed out! You win!');
-        
-        // Show game end modal FIRST (FIXED: Don't send leave_game immediately)
-        setTimeout(() => {
-          setGameEndResult({
-            isWinner: true,
-            amount: parseInt(stake) * 2,
-            stake: parseInt(stake),
-            reason: 'opponent_timeout'
-          });
-          setShowGameEndModal(true);
-          setGameState('finished');
-        }, 500);
-      }
-    };
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setMatchStatus('Opponent timed out! You win!');
+      
+      setTimeout(() => {
+        setGameEndResult({
+          isWinner: true,
+          amount: parseInt(stake) * 2,
+          stake: parseInt(stake),
+          reason: 'opponent_timeout'
+        });
+        setShowGameEndModal(true);
+        setGameState('finished');
+      }, 500);
+    }
+  };
 
-  // Format timer display
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Check for forwarded messages from lobby
+  // Check for forwarded messages from lobby (keeping existing code)
   useEffect(() => {
     const checkForForwardedMessages = () => {
       if (global.lastGameMessage) {
@@ -231,18 +295,14 @@ export default function SixKingGame() {
             break;
         }
         
-        // Clear the message after processing
         global.lastGameMessage = null;
       }
     };
 
-    // Check for messages every 100ms
     const interval = setInterval(checkForForwardedMessages, 100);
-    
     return () => clearInterval(interval);
   }, []);
 
-  // Initialize player ID immediately - don't wait for useEffect
   const initializePlayerId = () => {
     if (!user.id) {
       const playerId = user?.id || `player_${Date.now()}`;
@@ -252,25 +312,21 @@ export default function SixKingGame() {
     return user.id;
   };
 
-  // Initialize player ID and check if game already started from navigation
+  // Initialize player ID and check if game already started from navigation (keeping existing code)
   useEffect(() => {
     const playerId = initializePlayerId();
     console.log('🆔 useEffect - My Player ID:', playerId);
     
-    // Check if we came from lobby with game already started
     if (gameStarted === 'true' && firstPlayer && players) {
-      
       try {
         const gamePlayersData = JSON.parse(players);
         
-        // Set up the game immediately
         setGameState('playing');
         setCurrentTurn(firstPlayer);
         setWaitingForOpponent(false);
         setGameReady(true);
         setRoomCode(gameId);
         
-        // Set opponent info
         const opponent = gamePlayersData.find(p => String(p.id) !== String(playerId));
         if (opponent) {
           setOpponentName(opponent.name);
@@ -278,20 +334,16 @@ export default function SixKingGame() {
           console.log(`👤 Opponent from nav: ${opponent.name} (${opponent.id})`);
         }
         
-        // Start timer for first player
         startTimer(firstPlayer);
-        
         setMatchStatus('Game Started!');
         setTimeout(() => setMatchStatus(''), 1000);
         
       } catch (error) {
         console.error('Error parsing navigation game data:', error);
-        // Fallback to normal flow
         setGameState('waiting');
         setWaitingForOpponent(true);
       }
     } else {
-      // Normal flow - no game data from navigation
       setGameState('waiting');
       setWaitingForOpponent(true);
     }
@@ -300,8 +352,6 @@ export default function SixKingGame() {
   // WebSocket message handler
   function handleWebSocketMessage(message) {
     const { type, data } = message;
-
-    // Ensure we have a player ID before processing messages
     const currentPlayerId = user.id || initializePlayerId();
 
     switch (type) {
@@ -332,22 +382,21 @@ export default function SixKingGame() {
   function handleDiceRolled(data) {
     const { playerId, diceValue: rolledValue, newSixCount } = data;
     
-    // Clear timer when dice is rolled
     clearTimer();
-    
     setRollCount(prev => prev + 1);
-    
-    // Set who is currently rolling based on the playerId who rolled
     setCurrentRollingPlayer(playerId);
     
-    // Animate dice roll
+    // Reset admin mode after dice roll
+    if (adminMode) {
+      setAdminMode(false);
+      setSelectedAdminDice(null);
+    }
+    
     animateDiceRoll(rolledValue, () => {
-      // Show six effects IMMEDIATELY after animation completes
       if (rolledValue === 6) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       
-      // Update six counts AFTER a delay
       setTimeout(() => {
         if (String(playerId) === String(user.id)) {
           setPlayerSixes(newSixCount);
@@ -356,7 +405,6 @@ export default function SixKingGame() {
         }
       }, 300);
       
-      // Clear rolling state
       setTimeout(() => {
         setCurrentRollingPlayer(null);
       }, 1000);
@@ -366,22 +414,18 @@ export default function SixKingGame() {
   function handleTurnChanged(data) {
     setCurrentTurn(data.nextPlayer);
     setIsProcessingTurn(false);
-    
-    // Start timer for the new turn
     startTimer(data.nextPlayer);
   }
 
   function handleGameEnded(data) {
-    clearTimer(); // Clear timer when game ends
+    clearTimer();
     
     const rolledValue = 6;
     animateDiceRoll(rolledValue, () => {
-      // Haptic feedback immediately
       if (rolledValue === 6) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       
-      // Crown updates after 1 second
       setTimeout(() => {
         if (String(data.winner) === String(user.id)) {
           setPlayerSixes(3);
@@ -389,7 +433,6 @@ export default function SixKingGame() {
           setOpponentSixes(3);
         }
         
-        // THEN end game after crown updates complete
         setTimeout(() => {
           setWinner(data.winner);
           setGameState('finished');
@@ -400,7 +443,6 @@ export default function SixKingGame() {
         
       }, 1000);
       
-      // Clear rolling state
       setTimeout(() => {
         setCurrentRollingPlayer(null);
       }, 1000);
@@ -408,33 +450,28 @@ export default function SixKingGame() {
   }
 
   function handlePlayerLeft(data) {
-      clearTimer();
+    clearTimer();
+    
+    if (gameState === 'playing' && !showGameEndModal) {
+      setMatchStatus('Opponent left the game - You win!');
       
-      // Check if this was due to a timeout scenario
-      if (gameState === 'playing' && !showGameEndModal) {
-        // If game was still playing and we haven't shown end modal yet,
-        // this might be opponent leaving due to timeout
-        setMatchStatus('Opponent left the game - You win!');
-        
-        // Show win modal for remaining player
-        setTimeout(() => {
-          setGameEndResult({
-            isWinner: true,
-            amount: parseInt(stake) * 2,
-            stake: parseInt(stake),
-            reason: 'opponent_left'
-          });
-          setShowGameEndModal(true);
-          setGameState('finished');
-        }, 500);
-      } else {
-        // Normal player left scenario
-        setMatchStatus('Opponent left the game');
-        setTimeout(() => {
-          router.replace('/');
-        }, 500);
-      }
+      setTimeout(() => {
+        setGameEndResult({
+          isWinner: true,
+          amount: parseInt(stake) * 2,
+          stake: parseInt(stake),
+          reason: 'opponent_left'
+        });
+        setShowGameEndModal(true);
+        setGameState('finished');
+      }, 500);
+    } else {
+      setMatchStatus('Opponent left the game');
+      setTimeout(() => {
+        router.replace('/');
+      }, 500);
     }
+  }
 
   function handleError(data) {
     console.error('❌ WebSocket error:', data);
@@ -447,7 +484,7 @@ export default function SixKingGame() {
     }
   }
 
-  // Game actions
+  // ===== MODIFIED: Game actions with admin support =====
   const rollDice = () => {
     const currentPlayerId = user.id || initializePlayerId();
     const canRoll = String(currentTurn) === String(currentPlayerId) && 
@@ -461,20 +498,27 @@ export default function SixKingGame() {
       return;
     }
 
-    // Clear timer when rolling
     clearTimer();
-    
     setIsProcessingTurn(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     console.log('📤 Sending roll_dice message');
-    sendMessage('roll_dice', {
+    
+    // Send admin dice value if admin mode is active
+    const rollData = {
       gameId: roomCode,
       playerId: currentPlayerId
-    });
+    };
+    
+    if (adminMode && selectedAdminDice !== null) {
+      rollData.adminDiceValue = selectedAdminDice;
+      console.log(`🔑 Admin mode: forcing dice value to ${selectedAdminDice}`);
+    }
+    
+    sendMessage('roll_dice', rollData);
   };
 
-  // Animate dice roll
+  // Animate dice roll (keeping existing code)
   function animateDiceRoll(finalValue, onComplete) {
     setIsRolling(true);
     setDiceValue(1);
@@ -510,7 +554,7 @@ export default function SixKingGame() {
 
     let rollCounter = 0;
     const rollInterval = setInterval(() => {
-      const tempValue = Math.floor(Math.random() * 5) + 1; // 1-5 only
+      const tempValue = Math.floor(Math.random() * 5) + 1;
       setDiceValue(tempValue);
       rollCounter++;
       
@@ -522,12 +566,10 @@ export default function SixKingGame() {
       }
     }, 120);
 
-    // Ensure the callback runs only after ALL animations complete
     Animated.parallel([rotationAnimation, scaleAnimation]).start(() => {
       setIsRolling(false);
       diceRotation.setValue(0);
       
-      // Add a small delay before calling onComplete
       setTimeout(() => {
         console.log('🎲 Animation completed, now updating crown badges');
         onComplete();
@@ -535,14 +577,13 @@ export default function SixKingGame() {
     });
   }
 
-  // Game end handler
+  // Game end handler (keeping existing code)
   const handleGameEnd = async (winner) => {
-    clearTimer(); // Ensure timer is cleared
+    clearTimer();
     const stakeAmount = parseInt(stake);
     if (winner === 'player') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Show game end modal after 1 second
       setTimeout(() => {
         setGameEndResult({
           isWinner: true,
@@ -555,7 +596,6 @@ export default function SixKingGame() {
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
-      // Show game end modal after 1 second
       setTimeout(() => {
         setGameEndResult({
           isWinner: false,
@@ -567,17 +607,15 @@ export default function SixKingGame() {
     }
   };
 
-  // Handle game end modal actions
+  // Handle game end modal actions (keeping existing code)
   const handleTryAgain = () => {
     setShowGameEndModal(false);
-    // Navigate to stake selection page
     router.replace('games/six-king-lobby');
   };
 
   const handleExit = () => {
     setShowGameEndModal(false);
     
-    // Send leave_game message when manually exiting
     if (socket && roomCode && user.id) {
       sendMessage('leave_game', { 
         gameId: roomCode, 
@@ -587,11 +625,10 @@ export default function SixKingGame() {
       });
     }
     
-    // Navigate to home page
     router.replace('/');
   };
 
-  // Back press handler
+  // Back press handler (keeping existing code)
   const handleBackPress = () => {
     Alert.alert(
       "Leave Game?",
@@ -600,15 +637,12 @@ export default function SixKingGame() {
         {
           text: "Cancel",
           style: "cancel",
-          onPress: () => {
-            // Do nothing - stay in game
-          }
+          onPress: () => {}
         },
         {
           text: "OK",
           style: "destructive",
           onPress: () => {
-            // User confirmed - proceed with leaving
             clearTimer();
             setMatchStatus('Leaving game...');
             if (socket && roomCode && user.id) {
@@ -618,13 +652,13 @@ export default function SixKingGame() {
           }
         }
       ],
-      { cancelable: false } // Prevents dismissing by tapping outside
+      { cancelable: false }
     );
     
-    return true; // Prevent default back behavior
+    return true;
   };
 
-  // Helper functions
+  // Helper functions (keeping existing code)
   const getDiceIcon = (value) => {
     const icons = ['', 'looks-one', 'looks-two', 'looks-3', 'looks-4', 'looks-5', 'looks-6'];
     return icons[value];
@@ -660,7 +694,7 @@ export default function SixKingGame() {
     );
   };
 
-  // UI state helpers
+  // UI state helpers (keeping existing code)
   const canPlayerRoll = () => {
     const currentPlayerId = user.id || (user?.id || `player_${Date.now()}`);
     return String(currentTurn) === String(currentPlayerId) && 
@@ -681,7 +715,6 @@ export default function SixKingGame() {
       return 'WAITING FOR OPPONENT...';
     }
     
-    // Show correct rolling state based on who is rolling
     if (currentRollingPlayer) {
       if (String(currentRollingPlayer) === String(user.id)) {
         return 'ROLLING...';
@@ -697,11 +730,7 @@ export default function SixKingGame() {
     return isMyTurn() ? 'PROCESSING...' : 'OPPONENT TURN...';
   };
 
-  const getDebugInfo = () => {
-    return `Turn: ${currentTurn} | Me: ${user.id} | MyTurn: ${isMyTurn()} | State: ${gameState} | Waiting: ${waitingForOpponent} | Rolling: ${currentRollingPlayer} | NavGameStarted: ${gameStarted}`;
-  };
-
-  // Setup effects
+  // Setup effects (keeping existing code)
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     return () => {
@@ -713,14 +742,12 @@ export default function SixKingGame() {
     };
   }, [socket, roomCode, user.id]);
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       clearTimer();
     };
   }, []);
 
-  // Animation effects
   useEffect(() => {
     let pulseAnimation;
     
@@ -749,7 +776,6 @@ export default function SixKingGame() {
     };
   }, [currentTurn, gameState, waitingForOpponent, currentRollingPlayer, pulseAnim]);
 
-  // Six highlighting only when not rolling and dice value is 6
   useEffect(() => {
     let glowAnimation;
     
@@ -791,6 +817,104 @@ export default function SixKingGame() {
         <Animated.View style={[styles.floatingElement, styles.element2]} />
         <Animated.View style={[styles.floatingElement, styles.element3]} />
       </View>
+
+      {/* ===== NEW: ADMIN PANEL ===== */}
+      {isAdmin && (
+        <Animated.View 
+          style={[
+            styles.adminPanel,
+            {
+              transform: [{ translateY: adminPanelSlide }]
+            }
+          ]}
+        >
+          <LinearGradient
+            colors={['#FF6B6B', '#EE5A24', '#E74C3C']}
+            style={styles.adminPanelGradient}
+          >
+            <View style={styles.adminHeader}>
+              <MaterialIcons name="admin-panel-settings" size={scale(24)} color="#fff" />
+              <Text style={styles.adminTitle}>ADMIN PANEL</Text>
+              <TouchableOpacity onPress={toggleAdminPanel} style={styles.adminCloseButton}>
+                <MaterialIcons name="close" size={scale(20)} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.adminSubtitle}>Select dice value for next roll:</Text>
+            
+            <View style={styles.adminDiceGrid}>
+              {[1, 2, 3, 4, 5, 6].map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[
+                    styles.adminDiceButton,
+                    selectedAdminDice === value && styles.adminDiceButtonSelected
+                  ]}
+                  onPress={() => selectAdminDice(value)}
+                >
+                  <MaterialIcons
+                    name={getDiceIcon(value)}
+                    size={scale(24)}
+                    color={selectedAdminDice === value ? '#FF6B6B' : '#fff'}
+                  />
+                  <Text style={[
+                    styles.adminDiceText,
+                    selectedAdminDice === value && styles.adminDiceTextSelected
+                  ]}>
+                    {value}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            <View style={styles.adminControls}>
+              {adminMode && (
+                <View style={styles.adminStatusContainer}>
+                  <MaterialIcons name="check-circle" size={scale(16)} color="#00FF00" />
+                  <Text style={styles.adminStatusText}>
+                    Next roll will be: {selectedAdminDice}
+                  </Text>
+                </View>
+              )}
+              
+              <TouchableOpacity
+                style={styles.adminDisableButton}
+                onPress={disableAdminMode}
+                disabled={!adminMode}
+              >
+                <Text style={[
+                  styles.adminDisableText,
+                  !adminMode && styles.adminDisableTextDisabled
+                ]}>
+                  Disable Admin Mode
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
+      {/* ===== NEW: ADMIN TOGGLE BUTTON ===== */}
+      {isAdmin && gameState === 'playing' && (
+        <TouchableOpacity
+          style={styles.adminToggleButton}
+          onPress={toggleAdminPanel}
+        >
+          <LinearGradient
+            colors={adminMode ? ['#00FF00', '#00CC00'] : ['#FF6B6B', '#EE5A24']}
+            style={styles.adminToggleGradient}
+          >
+            <MaterialIcons 
+              name={adminMode ? "check-circle" : "admin-panel-settings"} 
+              size={scale(16)} 
+              color="#fff" 
+            />
+            <Text style={styles.adminToggleText}>
+              {adminMode ? `ADMIN: ${selectedAdminDice}` : 'ADMIN'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
 
       {/* Timer Display */}
       {isTimerActive && gameState === 'playing' && !waitingForOpponent && (
@@ -962,7 +1086,6 @@ export default function SixKingGame() {
           style={[
             styles.playerCard,
             styles.playerCardSelf,
-            // Show player highlighting only when player is playing/rolling
             ((isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
              (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && { 
               transform: [{ scale: pulseAnim }],
@@ -979,7 +1102,6 @@ export default function SixKingGame() {
             </View>
             <Text style={styles.playerName}>You</Text>
             {renderSixesProgress(playerSixes, true)}
-            {/* Show turn indicator for player when it's their turn or they're rolling */}
             {((isMyTurn() && !waitingForOpponent && !currentRollingPlayer) ||
               (currentRollingPlayer && String(currentRollingPlayer) === String(user.id))) && (
               <View style={styles.turnIndicator}>
@@ -1007,7 +1129,6 @@ export default function SixKingGame() {
           style={[
             styles.playerCard,
             styles.opponentCard,
-            // Show opponent highlighting only when opponent is playing/rolling
             ((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
              (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && { 
               transform: [{ scale: pulseAnim }],
@@ -1024,7 +1145,6 @@ export default function SixKingGame() {
             </View>
             <Text style={styles.playerName}>{opponentName}</Text>
             {renderSixesProgress(opponentSixes, false)}
-            {/* Show turn indicator for opponent when it's their turn or they're rolling */}
             {((!isMyTurn() && gameState === 'playing' && !waitingForOpponent && !currentRollingPlayer) ||
               (currentRollingPlayer && String(currentRollingPlayer) !== String(user.id))) && (
               <View style={styles.turnIndicator}>
@@ -1059,7 +1179,6 @@ export default function SixKingGame() {
               },
             ]}
           >
-            {/* Only show glow effects when dice shows 6 AND not rolling AND no one is currently rolling */}
             {diceValue === 6 && !isRolling && !currentRollingPlayer && (
               <>
                 <Animated.View 
@@ -1090,6 +1209,8 @@ export default function SixKingGame() {
             <LinearGradient
               colors={diceValue === 6 && !isRolling && !currentRollingPlayer
                 ? ['#FFD700', '#FF6B35', '#F7931E'] 
+                : adminMode
+                ? ['#FF6B6B', '#EE5A24', '#E74C3C'] // Red gradient for admin mode
                 : ['#667eea', '#764ba2', '#f093fb']
               }
               style={styles.dice}
@@ -1113,7 +1234,6 @@ export default function SixKingGame() {
               />
             </LinearGradient>
             
-            {/* Only show sparkles when dice shows 6 AND not rolling AND no one is currently rolling */}
             {diceValue === 6 && !isRolling && !currentRollingPlayer && (
               <>
                 <Animated.View 
@@ -1154,7 +1274,6 @@ export default function SixKingGame() {
             )}
           </Animated.View>
 
-          {/* Only show crown text when dice shows 6 AND not rolling AND no one is currently rolling */}
           {diceValue === 6 && !isRolling && !currentRollingPlayer && (playerSixes < 3 && opponentSixes < 3) && (
             <View style={styles.sixTextContainer}>
               <Text style={styles.sixText}>Crown Earned! 👑</Text>
@@ -1172,16 +1291,20 @@ export default function SixKingGame() {
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={['#4ECDC4', '#44A08D', '#2ECC71']}
+              colors={
+                adminMode 
+                  ? ['#FF6B6B', '#EE5A24', '#E74C3C'] // Red gradient for admin mode
+                  : ['#4ECDC4', '#44A08D', '#2ECC71']
+              }
               style={styles.rollButtonGradient}
             >
               <MaterialIcons 
-                name="casino" 
+                name={adminMode ? "admin-panel-settings" : "casino"} 
                 size={scale(24)} 
                 color="#fff" 
               />
               <Text style={styles.rollButtonText}>
-                ROLL DICE
+                {adminMode ? `ADMIN ROLL (${selectedAdminDice})` : 'ROLL DICE'}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -1265,10 +1388,147 @@ const styles = StyleSheet.create({
     left: -40,
   },
 
+  // ===== NEW: ADMIN PANEL STYLES =====
+  adminPanel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2000,
+    minHeight: height * 0.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  adminPanelGradient: {
+    flex: 1,
+    padding: scale(20),
+    paddingTop: height * 0.08,
+  },
+  adminHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: scale(20),
+  },
+  adminTitle: {
+    flex: 1,
+    fontSize: scale(20),
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: scale(10),
+    textAlign: 'center',
+  },
+  adminCloseButton: {
+    padding: scale(8),
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: scale(15),
+  },
+  adminSubtitle: {
+    fontSize: scale(14),
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: scale(20),
+    opacity: 0.9,
+  },
+  adminDiceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: scale(15),
+    marginBottom: scale(30),
+  },
+  adminDiceButton: {
+    width: scale(80),
+    height: scale(80),
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: scale(15),
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  adminDiceButtonSelected: {
+    backgroundColor: '#fff',
+    borderColor: '#FF6B6B',
+    shadowColor: '#fff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  adminDiceText: {
+    fontSize: scale(12),
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: scale(4),
+  },
+  adminDiceTextSelected: {
+    color: '#FF6B6B',
+  },
+  adminControls: {
+    alignItems: 'center',
+  },
+  adminStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 255, 0, 0.2)',
+    paddingHorizontal: scale(15),
+    paddingVertical: scale(8),
+    borderRadius: scale(15),
+    marginBottom: scale(15),
+  },
+  adminStatusText: {
+    color: '#fff',
+    fontSize: scale(14),
+    fontWeight: 'bold',
+    marginLeft: scale(8),
+  },
+  adminDisableButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: scale(20),
+    paddingVertical: scale(10),
+    borderRadius: scale(15),
+  },
+  adminDisableText: {
+    color: '#fff',
+    fontSize: scale(14),
+    fontWeight: 'bold',
+  },
+  adminDisableTextDisabled: {
+    opacity: 0.5,
+  },
+  adminToggleButton: {
+    position: 'absolute',
+    top: height * 0.15,
+    right: scale(20),
+    zIndex: 1500,
+    borderRadius: scale(20),
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  adminToggleGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(12),
+    paddingVertical: scale(8),
+  },
+  adminToggleText: {
+    color: '#fff',
+    fontSize: scale(10),
+    fontWeight: 'bold',
+    marginLeft: scale(4),
+  },
+
   // ===== TIMER STYLES =====
   timerContainer: {
     position: 'absolute',
-    bottom: height * 0.22, // Positioned above the roll dice button
+    bottom: height * 0.22,
     alignSelf: 'center',
     left: 0,
     right: 0,
@@ -1472,13 +1732,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  debugText: {
-    fontSize: scale(8),
-    color: '#FF6B6B',
-    marginTop: scale(2),
-    textAlign: 'center',
-    opacity: 0.7,
-  },
   stakeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1494,16 +1747,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  stakeText: {
-    color: '#FFD700',
-    fontWeight: 'bold',
-    fontSize: scale(13),
-    marginLeft: scale(6),
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-
   // ===== PLAYER CARD STYLES =====
   playersContainer: {
     flexDirection: 'row',
@@ -1788,33 +2031,5 @@ const styles = StyleSheet.create({
     fontSize: scale(11),
     textAlign: 'center',
     marginTop: scale(4),
-  },
-
-  // ===== SPECIAL EFFECTS STYLES =====
-  sixEffectOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  sixEffectText: {
-    fontSize: scale(32),
-    fontWeight: 'bold',
-    color: '#FFD700',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-  },
-  sixEffectGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
 });
