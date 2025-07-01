@@ -272,10 +272,10 @@ export default function HomeScreen() {
                 </View>
               )}
               
-              {/* Quick Play Button */}
-              <TouchableOpacity style={styles.quickPlayButton}>
+              {/* Quick Play Button - FIXED: Removed TouchableOpacity, now just a styled View */}
+              <View style={styles.quickPlayButton}>
                 <Text style={styles.quickPlayText}>खेलें →</Text>
-              </TouchableOpacity>
+              </View>
             </View>
           </View>
         </LinearGradient>
