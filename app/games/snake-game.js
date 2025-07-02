@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Line, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 const BOARD_SIZE = 10;
@@ -27,6 +28,107 @@ const CELL_SIZE = (width - 40) / BOARD_SIZE;
 
 import config from '../../config';
 const API_BASE_URL = `${config.BASE_URL}/api`;
+
+// Sound management class
+class SoundManager {
+  constructor() {
+    this.sounds = {};
+    this.isEnabled = true;
+  }
+
+  async loadSounds() {
+    try {
+      // Set audio mode for better mobile experience
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      // Load all sound files
+      this.sounds.diceRoll = new Audio.Sound();
+      await this.sounds.diceRoll.loadAsync(require('../../assets/audio/bgm/dice-roll.mp3'));
+
+      this.sounds.steps = new Audio.Sound();
+      await this.sounds.steps.loadAsync(require('../../assets/audio/bgm/steps.mp3'));
+
+      this.sounds.ladder = new Audio.Sound();
+      await this.sounds.ladder.loadAsync(require('../../assets/audio/bgm/ladder.mp3'));
+
+      this.sounds.gameWin = new Audio.Sound();
+      await this.sounds.gameWin.loadAsync(require('../../assets/audio/bgm/game-win.mp3'));
+
+      this.sounds.gameFail = new Audio.Sound();
+      await this.sounds.gameFail.loadAsync(require('../../assets/audio/bgm/game-fail.mp3'));
+
+      console.log('✅ All sounds loaded successfully');
+    } catch (error) {
+      console.error('❌ Error loading sounds:', error);
+      this.isEnabled = false;
+    }
+  }
+
+  async playSound(soundName, options = {}) {
+    if (!this.isEnabled || !this.sounds[soundName]) {
+      return;
+    }
+
+    try {
+      const sound = this.sounds[soundName];
+      
+      // Stop if already playing
+      await sound.stopAsync();
+      await sound.setPositionAsync(0);
+      
+      // Set volume if specified
+      if (options.volume !== undefined) {
+        await sound.setVolumeAsync(options.volume);
+      }
+      
+      // Play the sound
+      await sound.playAsync();
+    } catch (error) {
+      console.error(`Error playing sound ${soundName}:`, error);
+    }
+  }
+
+  async playDiceRoll() {
+    await this.playSound('diceRoll', { volume: 0.8 });
+  }
+
+  async playSteps() {
+    await this.playSound('steps', { volume: 0.6 });
+  }
+
+  async playLadder() {
+    await this.playSound('ladder', { volume: 0.7 });
+  }
+
+  async playGameWin() {
+    await this.playSound('gameWin', { volume: 0.9 });
+  }
+
+  async playGameFail() {
+    await this.playSound('gameFail', { volume: 0.9 });
+  }
+
+  async cleanup() {
+    try {
+      for (const soundName in this.sounds) {
+        if (this.sounds[soundName]) {
+          await this.sounds[soundName].unloadAsync();
+        }
+      }
+      this.sounds = {};
+    } catch (error) {
+      console.error('Error cleaning up sounds:', error);
+    }
+  }
+
+  setEnabled(enabled) {
+    this.isEnabled = enabled;
+  }
+}
 
 // Snake and Ladder positions - 22 snakes total (7 in each 30 range)
 const SNAKES = {
@@ -202,6 +304,9 @@ export default function SnakeGameScreen() {
   const params = useLocalSearchParams();
   const { user, updateWallet } = useAuth();
   
+  // Initialize sound manager
+  const soundManager = useRef(new SoundManager()).current;
+  
   // Parse parameters
   const mode = params.mode1 ? JSON.parse(params.mode1) : {};
   const stake = parseInt(params.stake) || 0;
@@ -243,6 +348,16 @@ export default function SnakeGameScreen() {
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferType, setTransferType] = useState(null); // 'snake' or 'ladder'
   const [activeTransferPath, setActiveTransferPath] = useState(null);
+
+  // Initialize sounds when component mounts
+  useEffect(() => {
+    soundManager.loadSounds();
+    
+    // Cleanup sounds when component unmounts
+    return () => {
+      soundManager.cleanup();
+    };
+  }, []);
 
   // API Helper Function
   const apiCall = async (endpoint, method = 'GET', body = null) => {
@@ -403,6 +518,13 @@ export default function SnakeGameScreen() {
     setIsTransferring(true);
     setTransferType(type);
     
+    // Play appropriate sound effect
+    if (type === 'ladder') {
+      soundManager.playLadder();
+    } else if (type === 'snake') {
+      soundManager.playGameFail(); // Play game fail sound for snake bite
+    }
+    
     // Set active transfer path for highlighting
     const currentPos = playerPosition;
     const targetPos = type === 'snake' ? SNAKES[currentPos] : LADDERS[currentPos];
@@ -459,12 +581,16 @@ export default function SnakeGameScreen() {
 
   const board = generateBoard();
 
-  // Step-by-step movement animation for normal rolls
+  // Step-by-step movement animation for normal rolls with sound
   const animateStepByStepMovement = (startPos, steps, callback) => {
     let currentStep = 0;
     
-    const moveOneStep = () => {
+    // Play steps sound once at the beginning
+    soundManager.playSteps();
+    
+    const moveOneStep = () => { 
       if (currentStep < steps) {
+        soundManager.playSteps();
         setPlayerPosition(startPos + currentStep + 1);
         currentStep++;
         setTimeout(moveOneStep, 300); // 300ms delay between each step
@@ -484,6 +610,9 @@ const rollDice = async () => {
     setCurrentRoll(currentRoll + 1);
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    // Play dice roll sound
+    soundManager.playDiceRoll();
     
     // Call backend to roll dice FIRST
     const response = await apiCall('/snake-game/roll', 'POST', {
@@ -526,6 +655,8 @@ const rollDice = async () => {
         animateStepByStepMovement(playerPosition, newPosition - playerPosition, () => {
           setGameStatus('won');
           
+          // Play win sound
+          soundManager.playGameWin();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           
           setTimeout(() => {
@@ -596,6 +727,9 @@ const rollDice = async () => {
             // After ladder, check if we reached 100 - INSTANT WIN
             if (ladderEnd >= 100) {
               setGameStatus('won');
+              
+              // Play win sound
+              soundManager.playGameWin();
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               
               setTimeout(() => {
@@ -610,6 +744,9 @@ const rollDice = async () => {
             // Check if this was the last roll and user survived
             else if (currentRoll + 1 >= mode.rolls) {
               setGameStatus('won');
+              
+              // Play win sound
+              soundManager.playGameWin();
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);            
               setTimeout(() => {
                 finalizeGame({
@@ -640,6 +777,9 @@ const rollDice = async () => {
           // Check if max rolls reached - SURVIVAL WIN if no snake bite
           if (currentRoll + 1 >= mode.rolls) {
             setGameStatus('won');
+            
+            // Play win sound
+            soundManager.playGameWin();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             
             setTimeout(() => {
@@ -903,6 +1043,22 @@ const rollDice = async () => {
             <Text style={styles.gameTitle}>Snake & Ladder</Text>
             <Text style={styles.modeText}>{mode.name}</Text>
           </View>
+          
+          {/* Sound Toggle Button */}
+          <TouchableOpacity
+            style={styles.soundButton}
+            onPress={() => {
+              const newState = !soundManager.isEnabled;
+              soundManager.setEnabled(newState);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <MaterialIcons 
+              name={soundManager.isEnabled ? "volume-up" : "volume-off"} 
+              size={24} 
+              color="#fff" 
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Game Info */}

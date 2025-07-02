@@ -21,6 +21,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../hooks/useAuth';
+import { Audio } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
 
@@ -54,6 +55,11 @@ export default function LuckyNumberGame() {
   const [isLeavingGame, setIsLeavingGame] = useState(false);
   const gameIdRef = useRef(null);
 
+  // Sound objects refs
+  const diceRollSound = useRef(null);
+  const gameWinSound = useRef(null);
+  const gameFailSound = useRef(null);
+
   // Animation refs
   const diceRotation = useRef(new Animated.Value(0)).current;
   const diceScale = useRef(new Animated.Value(1)).current;
@@ -73,6 +79,104 @@ export default function LuckyNumberGame() {
     opacity: new Animated.Value(0),
     color: ['#FFD700', '#4ECDC4', '#FF6B6B', '#8B5CF6', '#FFFFFF'][Math.floor(Math.random() * 5)]
   }));
+
+  // Sound Management Functions
+  const loadSounds = async () => {
+    try {
+      // Load dice roll sound with looping enabled
+      const { sound: diceSound } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/dice-roll.mp3'),
+        { 
+          shouldPlay: false, 
+          volume: 0.4,
+          isLooping: true // Enable looping for dice roll sound
+        }
+      );
+      diceRollSound.current = diceSound;
+
+      // Load game win sound
+      const { sound: winSound } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/game-win.mp3'),
+        { shouldPlay: false, volume: 0.8 }
+      );
+      gameWinSound.current = winSound;
+
+      // Load game fail sound
+      const { sound: failSound } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/game-fail.mp3'),
+        { shouldPlay: false, volume: 0.7 }
+      );
+      gameFailSound.current = failSound;
+
+      console.log('🔊 All sound effects loaded successfully');
+    } catch (error) {
+      console.error('❌ Error loading sound effects:', error);
+    }
+  };
+
+  const playDiceRollSound = async () => {
+    try {
+      if (diceRollSound.current) {
+        await diceRollSound.current.setPositionAsync(0);
+        await diceRollSound.current.playAsync();
+        console.log('🎲 Playing dice roll sound (looping)');
+      }
+    } catch (error) {
+      console.error('Error playing dice roll sound:', error);
+    }
+  };
+
+  const stopDiceRollSound = async () => {
+    try {
+      if (diceRollSound.current) {
+        await diceRollSound.current.stopAsync();
+        console.log('🎲 Stopped dice roll sound');
+      }
+    } catch (error) {
+      console.error('Error stopping dice roll sound:', error);
+    }
+  };
+
+  const playGameWinSound = async () => {
+    try {
+      if (gameWinSound.current) {
+        await gameWinSound.current.setPositionAsync(0);
+        await gameWinSound.current.playAsync();
+        console.log('🎉 Playing game win sound');
+      }
+    } catch (error) {
+      console.error('Error playing game win sound:', error);
+    }
+  };
+
+  const playGameFailSound = async () => {
+    try {
+      if (gameFailSound.current) {
+        await gameFailSound.current.setPositionAsync(0);
+        await gameFailSound.current.playAsync();
+        console.log('😔 Playing game fail sound');
+      }
+    } catch (error) {
+      console.error('Error playing game fail sound:', error);
+    }
+  };
+
+  const cleanupSounds = async () => {
+    try {
+      if (diceRollSound.current) {
+        await diceRollSound.current.unloadAsync();
+      }
+      if (gameWinSound.current) {
+        await gameWinSound.current.unloadAsync();
+      }
+      if (gameFailSound.current) {
+        await gameFailSound.current.unloadAsync();
+      }
+      console.log('🔇 Sound effects cleaned up');
+    } catch (error) {
+      console.error('Error cleaning up sounds:', error);
+    }
+  };
 
   // API Helper Function
   const apiCall = async (endpoint, method = 'GET', body = null) => {
@@ -107,6 +211,7 @@ export default function LuckyNumberGame() {
   // Initialize game on component mount
   useEffect(() => {
     initializeGame();
+    loadSounds(); // Load sound effects
     
     // Entrance animation
     Animated.timing(slideInAnim, {
@@ -116,10 +221,11 @@ export default function LuckyNumberGame() {
     }).start();
 
     return () => {
-      // Cleanup animations
+      // Cleanup animations and sounds
       diceRotation.setValue(0);
       diceScale.setValue(1);
       glowAnim.setValue(0);
+      cleanupSounds();
     };
   }, []);
 
@@ -271,6 +377,9 @@ export default function LuckyNumberGame() {
       setIsRolling(true);
       setDiceValue(null);
 
+      // 🎵 Start playing dice roll sound in loop
+      await playDiceRollSound();
+
       // Start rolling animations
       const rollAnimation = Animated.loop(
         Animated.timing(diceRotation, {
@@ -310,6 +419,9 @@ export default function LuckyNumberGame() {
         if (remainingTime > 0) {
           await new Promise(resolve => setTimeout(resolve, remainingTime));
         }
+
+        // 🎵 Stop dice roll sound when rolling finishes
+        await stopDiceRollSound();
 
         rollAnimation.stop();
         bounceAnimation.stop();
@@ -351,6 +463,9 @@ export default function LuckyNumberGame() {
                 setHasWon(true);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 
+                // 🎵 Play win sound
+                playGameWinSound();
+                
                 Animated.loop(
                   Animated.sequence([
                     Animated.timing(glowAnim, {
@@ -367,6 +482,9 @@ export default function LuckyNumberGame() {
                 ).start();
               } else {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                
+                // 🎵 Play fail sound
+                playGameFailSound();
               }
               
               setTimeout(() => {
@@ -378,6 +496,9 @@ export default function LuckyNumberGame() {
           Alert.alert('Error', 'Failed to roll dice');
         }
       } catch (apiError) {
+        // 🎵 Stop dice roll sound if API call fails
+        await stopDiceRollSound();
+        
         rollAnimation.stop();
         bounceAnimation.stop();
         diceRotation.setValue(0);
@@ -386,6 +507,9 @@ export default function LuckyNumberGame() {
         throw apiError;
       }
     } catch (error) {
+      // 🎵 Ensure dice roll sound is stopped on any error
+      await stopDiceRollSound();
+      
       Alert.alert('Error', error.message || 'Failed to roll dice');
       setIsRolling(false);
     }
@@ -962,7 +1086,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   titleContainer: {
-    marginTop:50,
+    marginTop: 50,
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: scale(10),
@@ -1202,40 +1326,13 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
   },
-  resultMessageContainer: {
-    position: 'absolute',
-    bottom: scale(-50),
-    left: scale(-60),
-    right: scale(-60),
-    alignItems: 'center',
-  },
-  resultMessageCard: {
-    padding: scale(12),
-    borderRadius: scale(15),
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    minWidth: scale(200),
-  },
-  resultMessageText: {
-    color: '#fff',
-    fontSize: scale(13),
-    fontWeight: '700',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-    lineHeight: scale(16),
-  },
   historySection: {
     marginBottom: scale(10),
-    // marginTop:100,
   },
   historyCard: {
     padding: scale(18),
-    
     borderRadius: scale(18),
-    marginBottom:80,
+    marginBottom: 80,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -1473,16 +1570,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 107, 107, 0.1)',
     borderWidth: 2,
     borderColor: 'rgba(255, 107, 107, 0.3)',
-  },
-  loadingTitle: {
-    fontSize: scale(18),
-    fontWeight: '900',
-    color: '#fff',
-    marginBottom: scale(6),
-    textAlign: 'center',
-    textShadowColor: 'rgba(255, 107, 107, 0.5)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   loadingSubtitle: {
     fontSize: scale(13),
