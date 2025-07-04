@@ -845,7 +845,7 @@ const menuItems = [
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <TouchableOpacity style={styles.hamburgerButton} onPress={openMenu}>
-                <MaterialIcons name="menu" size={24} color="#fff" />
+                <MaterialIcons name="menu" size={40} color="#fff" />
               </TouchableOpacity>
               
               <View style={styles.appBranding}>
@@ -1155,10 +1155,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   hamburgerButton: {
-    width: 40,
+    width: 45,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    // backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
