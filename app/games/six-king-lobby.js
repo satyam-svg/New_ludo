@@ -1,5 +1,5 @@
 // app/games/six-king-lobby.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 
@@ -32,9 +33,64 @@ export default function SixKingLobby() {
   const [waitingMessage, setWaitingMessage] = useState('');
   const [createdGameCode, setCreatedGameCode] = useState('');
   const [connectedPlayers, setConnectedPlayers] = useState(0);
+  const gameMatch = useRef(null);
 
   const predefinedStakes = [50, 100, 250, 500, 1000, 2500];
   const enabledStakes = [100, 1000]; // Only these stakes are enabled
+
+  const loadMatchSound = async () => {
+    try {
+      //console.log('Loading match sound...');
+      const { sound:gameMat } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/6-king-match.mp3'),
+        { 
+          shouldPlay: false,
+          volume: 0.8,
+          isLooping: false
+        }
+      );
+      gameMatch.current = gameMat;
+      //console.log('Match sound loaded successfully');
+    } catch (error) {
+      //console.log('Error loading match sound:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadMatchSound();
+    
+    return () => {
+      if (gameMatch.current) {
+        //console.log('Unloading sound...');
+        gameMatch.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  const cleanupSounds = async () => {
+    try {
+      if (gameMatch.current) {
+        await gameMatch.current.unloadAsync();
+      }
+    } catch (error) {
+      console.error('Error cleaning up sounds:', error);
+    }
+  };
+  // Play match sound
+  const playMatchSound = async () => {
+    try {
+      if (gameMatch.current) {
+        //console.log('Playing match sound...');
+        // Stop any currently playing sound and replay
+        await gameMatch.current.setPositionAsync(0);
+        await gameMatch.current.playAsync();
+      } else {
+        //console.log('Sound not loaded yet');
+      }
+    } catch (error) {
+      //console.log('Error playing match sound:', error);
+    }
+  };
   
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
@@ -50,7 +106,7 @@ export default function SixKingLobby() {
   });
   
   function handleSocketConnect() {
-    console.log('✅ Connected to Six King lobby');
+    //console.log('✅ Connected to Six King lobby');
     setLobbyState('menu');
   }
 
@@ -62,11 +118,11 @@ export default function SixKingLobby() {
 
   function handleWebSocketMessage(message) {
     const { type, data } = message;
-    console.log('📨 Lobby message received:', type, data);
+    //console.log('📨 Lobby message received:', type, data);
 
     switch (type) {
       case 'connected':
-        console.log('Welcome message:', data.message);
+        //console.log('Welcome message:', data.message);
         break;
         
       case 'game_created':
@@ -84,7 +140,7 @@ export default function SixKingLobby() {
       case 'game_matched':
         handleGameMatched(data);
         break;
-        
+      
       case 'game_started':
         handleGameStarted(data);
         break;
@@ -101,12 +157,12 @@ export default function SixKingLobby() {
       case 'dice_rolled':
       case 'turn_changed':
       case 'game_ended':
-        console.log(`Game message ${type} received in lobby - will be handled by game screen`);
+        //console.log(`Game message ${type} received in lobby - will be handled by game screen`);
         // Game screen will receive this message too via the shared WebSocket
         break;
         
       default:
-        console.log('Unknown message type:', type);
+        //console.log('Unknown message type:', type);
     }
   }
 
@@ -124,9 +180,13 @@ export default function SixKingLobby() {
   }
 
   function handleGameStarted(data) {
-    console.log('🎮 Game started from lobby, navigating immediately...', data);
+    //console.log('🎮 Game started from lobby, navigating immediately...', data);
     setLobbyState('matched');
-    
+
+    playMatchSound();
+    setTimeout(() => {
+      
+    }, 1000);
     
     // disconnect();
     // Navigate immediately with complete game data - NO POPUP!
@@ -143,10 +203,11 @@ export default function SixKingLobby() {
   }
 
   function handleGameMatched(data) {
-    console.log('🎯 Match found from lobby:', data);
+    //console.log('🎯 Match found from lobby:', data);
     setLobbyState('matched');
     setWaitingMessage(`Matched with ${data.opponent.name}!`);
     setIsLoading(false);
+    playMatchSound();
     
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
@@ -158,6 +219,7 @@ export default function SixKingLobby() {
     setWaitingMessage(`${data.player.name} joined the game!`);
     setConnectedPlayers(2);
     
+    playMatchSound();
     // Auto-start game when both players are present
     setTimeout(() => {
       if (createdGameCode) {

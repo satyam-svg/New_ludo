@@ -1,4 +1,3 @@
-// app/games/six-king.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 
@@ -80,7 +80,135 @@ export default function SixKingGame() {
   const [selectedAdminDice, setSelectedAdminDice] = useState(null);
   const [adminMode, setAdminMode] = useState(false);
 
-  
+  // Sound objects refs
+  const diceRollSound = useRef(null);
+  const gameWinSound = useRef(null);
+  const gameFailSound = useRef(null);
+  const sixCrownSound = useRef(null);
+
+  // Sound Management Functions
+  const loadSounds = async () => {
+    try {
+      // Set audio mode first
+
+      // Load dice roll sound with looping enabled
+      const { sound: diceSound } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/dice-roll.mp3'),
+        { 
+          shouldPlay: false, 
+          volume: 0.4,
+          isLooping: true // Enable looping for dice roll sound
+        }
+      );
+      diceRollSound.current = diceSound;
+
+      // Load game win sound
+      const { sound: winSound } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/game-win.mp3'),
+        { shouldPlay: false, volume: 0.8 }
+      );
+      gameWinSound.current = winSound;
+
+      // Load game fail sound
+      const { sound: failSound } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/game-fail.mp3'),
+        { shouldPlay: false, volume: 0.7 }
+      );
+      gameFailSound.current = failSound;
+
+      // Load crown six sound
+      const { sound: crown } = await Audio.Sound.createAsync(
+        require('../../assets/audio/bgm/six-crown.mp3'),
+        { shouldPlay: false, volume: 0.7 }
+      );
+      sixCrownSound.current = crown;
+    } catch (error) {
+      console.error('❌ Error loading sound effects:', error);
+    }
+  };
+
+  const playDiceRollSound = async () => {
+    try {
+      if (diceRollSound.current) {
+        await diceRollSound.current.setPositionAsync(0);
+        await diceRollSound.current.playAsync();
+      } else {
+        //console.log('⚠️ Dice roll sound not loaded');
+      }
+    } catch (error) {
+      console.error('Error playing dice roll sound:', error);
+    }
+  };
+
+  const stopDiceRollSound = async () => {
+    try {
+      if (diceRollSound.current) {
+        await diceRollSound.current.stopAsync();
+        //console.log('🎲 Stopped dice roll sound');
+      }
+    } catch (error) {
+      console.error('Error stopping dice roll sound:', error);
+    }
+  };
+
+  const playGameWinSound = async () => {
+    try {
+      if (gameWinSound.current) {
+        await gameWinSound.current.setPositionAsync(0);
+        await gameWinSound.current.playAsync();
+        //console.log('🎉 Playing game win sound');
+      } else {
+        //console.log('⚠️ Game win sound not loaded');
+      }
+    } catch (error) {
+      console.error('Error playing game win sound:', error);
+    }
+  };
+
+  const playSixCrownSound = async () => {
+    try {
+      if (sixCrownSound.current) {
+        await sixCrownSound.current.setPositionAsync(0);
+        await sixCrownSound.current.playAsync();
+        //console.log('🎉 Six game win sound');
+      } else {
+        //console.log('⚠️ Six win sound not loaded');
+      }
+    } catch (error) {
+      console.error('Error playing game win sound:', error);
+    }
+  };
+
+  const playGameFailSound = async () => {
+    try {
+      if (gameFailSound.current) {
+        await gameFailSound.current.setPositionAsync(0);
+        await gameFailSound.current.playAsync();
+        //console.log('😔 Playing game fail sound');
+      } else {
+        //console.log('⚠️ Game fail sound not loaded');
+      }
+    } catch (error) {
+      console.error('Error playing game fail sound:', error);
+    }
+  };
+
+  const cleanupSounds = async () => {
+    try {
+      if (diceRollSound.current) {
+        await diceRollSound.current.unloadAsync();
+      }
+      if (gameWinSound.current) {
+        await gameWinSound.current.unloadAsync();
+      }
+      if (gameFailSound.current) {
+        await gameFailSound.current.unloadAsync();
+      }
+      //console.log('🔇 Sound effects cleaned up');
+    } catch (error) {
+      console.error('Error cleaning up sounds:', error);
+    }
+  };
 
   const apiCall = async (endpoint, method = 'GET', body = null) => {
     try {
@@ -113,13 +241,13 @@ export default function SixKingGame() {
   const { socket, isConnected, sendMessage } = useWebSocket({
     onMessage: handleWebSocketMessage,
     onConnect: () => {
-      console.log('🔌 Game WebSocket connected');
+      //console.log('🔌 Game WebSocket connected');
       
       // Check admin status when connected
       checkAdminStatus();
       
       if (gameStarted === 'true' && roomCode && user.id) {
-        console.log('🔄 Updating backend WebSocket connection for game');
+        //console.log('🔄 Updating backend WebSocket connection for game');
         sendMessage('update_connection', {
           gameId: roomCode,
           playerId: user.id
@@ -127,7 +255,7 @@ export default function SixKingGame() {
       }
     },
     onDisconnect: () => {
-      console.log('🔌 Game WebSocket disconnected');
+      //console.log('🔌 Game WebSocket disconnected');
       clearTimer();
     }
   });
@@ -141,7 +269,7 @@ export default function SixKingGame() {
   const timerPulse = useRef(new Animated.Value(1)).current;
   const adminPanelSlide = useRef(new Animated.Value(-height)).current;
 
-  // ===== NEW: ADMIN FUNCTIONS =====
+  // ===== ADMIN FUNCTIONS =====
   const checkAdminStatus = async () => {
     try {
       const response = await apiCall(`/check/${user.id}`, 'GET');
@@ -175,9 +303,9 @@ export default function SixKingGame() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  // Timer functions (keeping existing code)
+  // Timer functions
   const startTimer = (playerId) => {
-    console.log(`⏰ Starting timer for player: ${playerId}`);
+    //console.log(`⏰ Starting timer for player: ${playerId}`);
     clearTimer();
     
     setTimeLeft(ROLL_TIMEOUT_SECONDS);
@@ -232,7 +360,7 @@ export default function SixKingGame() {
   };
 
   const handleTimeUp = (playerId) => {
-    console.log(`⏰ Time up for player: ${playerId}`);
+    //console.log(`⏰ Time up for player: ${playerId}`);
     clearTimer();
     
     const currentPlayerId = user.id || initializePlayerId();
@@ -241,6 +369,9 @@ export default function SixKingGame() {
     if (isMyTimeout) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setMatchStatus('Time up! You lose...');
+      
+      // Play lose sound for timeout
+      playGameFailSound();
       
       setTimeout(() => {
         setGameEndResult({
@@ -256,6 +387,9 @@ export default function SixKingGame() {
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setMatchStatus('Opponent timed out! You win!');
+      
+      // Play win sound for opponent timeout
+      playGameWinSound();
       
       setTimeout(() => {
         setGameEndResult({
@@ -276,12 +410,12 @@ export default function SixKingGame() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Check for forwarded messages from lobby (keeping existing code)
+  // Check for forwarded messages from lobby
   useEffect(() => {
     const checkForForwardedMessages = () => {
       if (global.lastGameMessage) {
         const { type, data } = global.lastGameMessage;
-        console.log('📨 Processing forwarded message from lobby:', type, data);
+        //console.log('📨 Processing forwarded message from lobby:', type, data);
         
         switch (type) {
           case 'dice_rolled':
@@ -306,16 +440,16 @@ export default function SixKingGame() {
   const initializePlayerId = () => {
     if (!user.id) {
       const playerId = user?.id || `player_${Date.now()}`;
-      console.log('🆔 My Player ID set to:', playerId);
+      //console.log('🆔 My Player ID set to:', playerId);
       return playerId;
     }
     return user.id;
   };
 
-  // Initialize player ID and check if game already started from navigation (keeping existing code)
+  // Initialize player ID and check if game already started from navigation
   useEffect(() => {
     const playerId = initializePlayerId();
-    console.log('🆔 useEffect - My Player ID:', playerId);
+    //console.log('🆔 useEffect - My Player ID:', playerId);
     
     if (gameStarted === 'true' && firstPlayer && players) {
       try {
@@ -331,7 +465,7 @@ export default function SixKingGame() {
         if (opponent) {
           setOpponentName(opponent.name);
           setOpponentId(opponent.id);
-          console.log(`👤 Opponent from nav: ${opponent.name} (${opponent.id})`);
+          //console.log(`👤 Opponent from nav: ${opponent.name} (${opponent.id})`);
         }
         
         startTimer(firstPlayer);
@@ -356,10 +490,10 @@ export default function SixKingGame() {
 
     switch (type) {
       case 'connected':
-        console.log('Game WebSocket connected message');
+        //console.log('Game WebSocket connected message');
         break;
       case 'connection_updated':
-        console.log('✅ Backend WebSocket connection updated for game');
+        //console.log('✅ Backend WebSocket connection updated for game');
         break;
       case 'dice_rolled':
         handleDiceRolled(data, currentPlayerId);
@@ -429,8 +563,12 @@ export default function SixKingGame() {
       setTimeout(() => {
         if (String(data.winner) === String(user.id)) {
           setPlayerSixes(3);
+          // Play win sound
+          playGameWinSound();
         } else {
           setOpponentSixes(3);
+          // Play lose sound
+          playGameFailSound();
         }
         
         setTimeout(() => {
@@ -454,6 +592,9 @@ export default function SixKingGame() {
     
     if (gameState === 'playing' && !showGameEndModal) {
       setMatchStatus('Opponent left the game - You win!');
+      
+      // Play win sound when opponent leaves
+      playGameWinSound();
       
       setTimeout(() => {
         setGameEndResult({
@@ -484,7 +625,7 @@ export default function SixKingGame() {
     }
   }
 
-  // ===== MODIFIED: Game actions with admin support =====
+  // Game actions with admin support
   const rollDice = () => {
     const currentPlayerId = user.id || initializePlayerId();
     const canRoll = String(currentTurn) === String(currentPlayerId) && 
@@ -494,15 +635,18 @@ export default function SixKingGame() {
                    !waitingForOpponent;
 
     if (!canRoll) {
-      console.log('❌ Cannot roll dice - conditions not met');
+      //console.log('❌ Cannot roll dice - conditions not met');
       return;
     }
 
     clearTimer();
     setIsProcessingTurn(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    // Start dice roll sound
+    playDiceRollSound();
 
-    console.log('📤 Sending roll_dice message');
+    //console.log('📤 Sending roll_dice message');
     
     // Send admin dice value if admin mode is active
     const rollData = {
@@ -512,13 +656,13 @@ export default function SixKingGame() {
     
     if (adminMode && selectedAdminDice !== null) {
       rollData.adminDiceValue = selectedAdminDice;
-      console.log(`🔑 Admin mode: forcing dice value to ${selectedAdminDice}`);
+      //console.log(`🔑 Admin mode: forcing dice value to ${selectedAdminDice}`);
     }
     
     sendMessage('roll_dice', rollData);
   };
 
-  // Animate dice roll (keeping existing code)
+  // Animate dice roll
   function animateDiceRoll(finalValue, onComplete) {
     setIsRolling(true);
     setDiceValue(1);
@@ -562,6 +706,15 @@ export default function SixKingGame() {
         clearInterval(rollInterval);
         setTimeout(() => {
           setDiceValue(finalValue);
+          
+          // Stop dice roll sound when dice stops
+          stopDiceRollSound();
+          
+          // Play special sound if six is rolled
+          if (finalValue === 6) {
+            // If you have a six crown sound, play it here
+            playSixCrownSound();
+          }
         }, 100);
       }
     }, 120);
@@ -571,18 +724,22 @@ export default function SixKingGame() {
       diceRotation.setValue(0);
       
       setTimeout(() => {
-        console.log('🎲 Animation completed, now updating crown badges');
+        //console.log('🎲 Animation completed, now updating crown badges');
         onComplete();
       }, 200);
     });
   }
 
-  // Game end handler (keeping existing code)
+  // Game end handler
   const handleGameEnd = async (winner) => {
     clearTimer();
     const stakeAmount = parseInt(stake);
+    
     if (winner === 'player') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      // Play win sound
+      playGameWinSound();
       
       setTimeout(() => {
         setGameEndResult({
@@ -593,8 +750,10 @@ export default function SixKingGame() {
         setShowGameEndModal(true);
       }, 1000);
     } else {
-      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
+      // Play lose sound
+      playGameFailSound();
       
       setTimeout(() => {
         setGameEndResult({
@@ -605,12 +764,6 @@ export default function SixKingGame() {
         setShowGameEndModal(true);
       }, 1000);
     }
-  };
-
-  // Handle game end modal actions (keeping existing code)
-  const handleTryAgain = () => {
-    setShowGameEndModal(false);
-    router.replace('games/six-king-lobby');
   };
 
   const handleExit = () => {
@@ -628,7 +781,7 @@ export default function SixKingGame() {
     router.replace('/');
   };
 
-  // Back press handler (keeping existing code)
+  // Back press handler
   const handleBackPress = () => {
     Alert.alert(
       "Leave Game?",
@@ -644,6 +797,10 @@ export default function SixKingGame() {
           style: "destructive",
           onPress: () => {
             clearTimer();
+            
+            // Stop any playing sounds when leaving
+            stopDiceRollSound();
+            
             setMatchStatus('Leaving game...');
             if (socket && roomCode && user.id) {
               sendMessage('leave_game', { gameId: roomCode, playerId: user.id , opponentId: opponentId, stake: stake});
@@ -658,7 +815,7 @@ export default function SixKingGame() {
     return true;
   };
 
-  // Helper functions (keeping existing code)
+  // Helper functions
   const getDiceIcon = (value) => {
     const icons = ['', 'looks-one', 'looks-two', 'looks-3', 'looks-4', 'looks-5', 'looks-6'];
     return icons[value];
@@ -694,7 +851,7 @@ export default function SixKingGame() {
     );
   };
 
-  // UI state helpers (keeping existing code)
+  // UI state helpers
   const canPlayerRoll = () => {
     const currentPlayerId = user.id || (user?.id || `player_${Date.now()}`);
     return String(currentTurn) === String(currentPlayerId) && 
@@ -730,12 +887,17 @@ export default function SixKingGame() {
     return isMyTurn() ? 'PROCESSING...' : 'OPPONENT TURN...';
   };
 
-  // Setup effects (keeping existing code)
+  // Setup effects
   useEffect(() => {
+    // Load sounds when component mounts
+    loadSounds();
+    
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     return () => {
       backHandler.remove();
       clearTimer();
+      // Cleanup sounds when component unmounts
+      cleanupSounds();
       if (socket && roomCode && user.id) {
         sendMessage('leave_game', { gameId: roomCode, playerId: user.id });
       }
@@ -818,7 +980,7 @@ export default function SixKingGame() {
         <Animated.View style={[styles.floatingElement, styles.element3]} />
       </View>
 
-      {/* ===== NEW: ADMIN PANEL ===== */}
+      {/* ADMIN PANEL */}
       {isAdmin && (
         <Animated.View 
           style={[
@@ -894,7 +1056,7 @@ export default function SixKingGame() {
         </Animated.View>
       )}
 
-      {/* ===== NEW: ADMIN TOGGLE BUTTON ===== */}
+      {/* ADMIN TOGGLE BUTTON */}
       {isAdmin && gameState === 'playing' && (
         <TouchableOpacity
           style={styles.adminToggleButton}
