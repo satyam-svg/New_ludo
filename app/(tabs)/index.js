@@ -26,7 +26,7 @@ import config from '../../config';
 
 const { width } = Dimensions.get('window');
 
-const STAKES = [10, 30, 50, 100, 500, 1000];
+const STAKES = [2, 10, 30, 50, 100, 500, 1000, 2000, 5000];
 
 // Game Rules Data
 const gameRules = [
@@ -244,7 +244,7 @@ export default function HomeScreen() {
       description: 'सांप से बचो, सीढ़ी से चढ़ो, जीत पक्की! 🐍🪜',
       icon: 'bug-report',
       gradient: ['#4E9525', '#2B5E20'],
-      multiplier: '2x - 16x',
+      multiplier: '16x',
       multiplierHint: 'कम से कम डबल, ज़्यादा से ज़्यादा 16 गुना! 😲',
       badge: 'एडवेंचर',
       players: 'रोमांच भरा गेम'
@@ -984,7 +984,7 @@ const menuItems = [
                     >
                       <MaterialIcons name="trending-up" size={30} color="#FFD700" />
                       <Text style={styles.featureTitle}>High Rewards</Text>
-                      <Text style={styles.featureDescription}>Win up to 15x</Text>
+                      <Text style={styles.featureDescription}>Win up to 16x</Text>
                     </LinearGradient>
                   </View>
                 </View>
