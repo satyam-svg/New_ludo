@@ -39,12 +39,15 @@ const MatkaKingGame = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userSessions, setUserSessions] = useState([]);
+  const [showUserBets, setShowUserBets] = useState(false);
+  
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
-        return () => {
-          backHandler.remove();
-        };
-      }, []);
+    return () => {
+      backHandler.remove();
+    };
+  }, []);
+
   // API Helper Function
   const apiCall = async (endpoint, method = 'GET', body = null) => {
     try {
@@ -120,10 +123,10 @@ const MatkaKingGame = () => {
       fetchSlots();
       fetchUserSessions();
       
-      // Set up interval to refresh data every minute
+      // Set up interval to refresh data every minute (like backend cron job)
       const interval = setInterval(() => {
         fetchSlots();
-      }, 300000);
+      }, 60000);
 
       return () => clearInterval(interval);
     }, [])
@@ -212,6 +215,39 @@ const MatkaKingGame = () => {
     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
+  const formatDate = (dateInput) => {
+    // Handle both string and Date object
+    let date;
+    if (typeof dateInput === 'string') {
+      // If it's a string, parse it properly
+      if (dateInput.includes('T')) {
+        // ISO string format
+        date = new Date(dateInput);
+      } else {
+        // Date only format like "2024-01-15"
+        date = new Date(dateInput + 'T00:00:00');
+      }
+    } else if (dateInput instanceof Date) {
+      date = dateInput;
+    } else {
+      console.warn('Invalid date input:', dateInput);
+      return 'Invalid Date';
+    }
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date after parsing:', dateInput);
+      return 'Invalid Date';
+    }
+    
+    // Always return the actual date instead of relative terms
+    return date.toLocaleDateString('en-IN', { 
+      day: 'numeric', 
+      month: 'short',
+      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+    });
+  };
+
   if (isLoading && !refreshing) {
     return (
       <LinearGradient
@@ -255,10 +291,33 @@ const MatkaKingGame = () => {
             <Text style={styles.subtitle}>Win 10x Your Stake!</Text>
           </View>
           
-          <View style={styles.stakeContainer}>
+          <TouchableOpacity 
+            style={styles.stakeContainer}
+            onPress={() => setShowUserBets(!showUserBets)}
+          >
             <MaterialIcons name="monetization-on" size={20} color="#FFD700" />
             <Text style={styles.stakeText}>₹{user?.wallet || 0}</Text>
-          </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Toggle Button for User Bets */}
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[styles.toggleButton, !showUserBets && styles.toggleButtonActive]}
+            onPress={() => setShowUserBets(false)}
+          >
+            <Text style={[styles.toggleText, !showUserBets && styles.toggleTextActive]}>
+              All Slots
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleButton, showUserBets && styles.toggleButtonActive]}
+            onPress={() => setShowUserBets(true)}
+          >
+            <Text style={[styles.toggleText, showUserBets && styles.toggleTextActive]}>
+              My Bets ({userSessions.length})
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Info Banner */}
@@ -269,12 +328,15 @@ const MatkaKingGame = () => {
           >
             <MaterialIcons name="info" size={20} color="#FFD700" />
             <Text style={styles.infoBannerText}>
-              Choose your lucky number (0-9) • Minimum bet ₹10 • Win 10x your stake
+              {showUserBets 
+                ? "Your betting history and current bets"
+                : "Choose your lucky number (0-9) • Minimum bet ₹10 • Win 10x your stake"
+              }
             </Text>
           </LinearGradient>
         </View>
 
-        {/* Time Slots */}
+        {/* Content */}
         <ScrollView 
           style={styles.slotsScrollView}
           contentContainerStyle={styles.slotsContainer}
@@ -288,186 +350,321 @@ const MatkaKingGame = () => {
             />
           }
         >
-          {timeSlots.map((slot, index) => {
-            const userBet = slot.userBet;
-            const hasUserBet = !!userBet;
-            const isWinner = hasUserBet && slot.winningNumber !== null && slot.winningNumber === userBet.number;
-            
-            return (
-              <Animated.View
-                key={slot.id}
-                style={styles.slotCard}
-              >
-                <LinearGradient
-                  colors={getSlotStatusColor(slot.status, hasUserBet)}
-                  style={styles.slotCardGradient}
-                >
-                  <View style={styles.slotHeader}>
-                    <View style={styles.slotTimeContainer}>
-                      <MaterialIcons 
-                        name={getStatusIcon(slot.status)} 
-                        size={24} 
-                        color="#fff" 
-                      />
-                      <Text style={styles.slotTime}>{slot.name}</Text>
-                    </View>
-                    
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusText}>
-                        {slot.status === 'open' ? 'LIVE' : 
-                         slot.status === 'closed' ? 'CLOSED' : 'UPCOMING'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.slotInfo}>
-                    <View style={styles.participantsContainer}>
-                      <MaterialIcons name="people" size={16} color="#fff" />
-                      <Text style={styles.participantsText}>
-                        {slot.participants} players
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.payoutContainer}>
-                      <MaterialIcons name="trending-up" size={16} color="#fff" />
-                      <Text style={styles.payoutText}>10x payout</Text>
-                    </View>
-                  </View>
-
-                  {/* Slot Timing Info */}
-                  <View style={styles.timingInfo}>
-                    <MaterialIcons name="schedule" size={14} color="#888" />
-                    <Text style={styles.timingText}>
-                      {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
-                    </Text>
-                  </View>
-
-                  {/* User Bet Info */}
-                  {hasUserBet && (
-                    <View style={styles.userBetInfo}>
-                      <LinearGradient
-                        colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.1)']}
-                        style={styles.userBetGradient}
-                      >
-                        <MaterialIcons name="casino" size={16} color="#FFD700" />
-                        <Text style={styles.userBetText}>
-                          Your bet: {userBet.number} • ₹{userBet.amount}
-                        </Text>
-                        {slot.winningNumber !== null && (
+          {showUserBets ? (
+            // User Bets View
+            <>
+              {userSessions.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <MaterialIcons name="casino" size={60} color="#666" />
+                  <Text style={styles.emptyStateTitle}>No Bets Yet</Text>
+                  <Text style={styles.emptyStateSubtitle}>
+                    You haven't placed any bets yet
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.refreshButton}
+                    onPress={() => setShowUserBets(false)}
+                  >
+                    <LinearGradient
+                      colors={['#4ECDC4', '#44A08D']}
+                      style={styles.refreshButtonGradient}
+                    >
+                      <MaterialIcons name="casino" size={20} color="#fff" />
+                      <Text style={styles.refreshButtonText}>Place First Bet</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                userSessions.map((session, index) => (
+                  <Animated.View
+                    key={session.gameId}
+                    style={styles.betCard}
+                  >
+                    <LinearGradient
+                      colors={
+                        session.won 
+                          ? ['rgba(78, 205, 196, 0.3)', 'rgba(68, 160, 141, 0.2)']
+                          : session.gameState === 'active'
+                          ? ['rgba(255, 193, 7, 0.3)', 'rgba(255, 152, 0, 0.2)']
+                          : ['rgba(255, 107, 107, 0.3)', 'rgba(255, 142, 83, 0.2)']
+                      }
+                      style={styles.betCardGradient}
+                    >
+                      <View style={styles.betHeader}>
+                        <View style={styles.betTitleContainer}>
                           <MaterialIcons 
-                            name={isWinner ? "check-circle" : "cancel"} 
-                            size={16} 
-                            color={isWinner ? "#4ECDC4" : "#FF6B6B"} 
+                            name={
+                              session.won ? "emoji-events" : 
+                              session.gameState === 'active' ? "schedule" : "cancel"
+                            } 
+                            size={20} 
+                            color={
+                              session.won ? "#4ECDC4" : 
+                              session.gameState === 'active' ? "#FFD700" : "#FF6B6B"
+                            } 
                           />
-                        )}
-                      </LinearGradient>
-                    </View>
-                  )}
+                          <Text style={styles.betSlotName}>{session.slotName}</Text>
+                        </View>
+                        <View style={styles.betDateContainer}>
+                          <Text style={styles.betDate}>
+                            {formatDate(session.createdAt)}
+                          </Text>
+                        </View>
+                      </View>
 
-                  {/* Result Display with Win/Loss */}
-                  {slot.winningNumber !== null && (
-                    <View style={styles.resultSection}>
-                      <View style={styles.resultDisplay}>
+                      <View style={styles.betDetails}>
+                        <View style={styles.betDetailRow}>
+                          <Text style={styles.betDetailLabel}>Your Number:</Text>
+                          <View style={styles.numberBadge}>
+                            <Text style={styles.numberBadgeText}>{session.luckyNumber}</Text>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.betDetailRow}>
+                          <Text style={styles.betDetailLabel}>Stake Amount:</Text>
+                          <Text style={styles.betDetailValue}>₹{session.stake}</Text>
+                        </View>
+
+                        {session.winningNumber !== null && (
+                          <View style={styles.betDetailRow}>
+                            <Text style={styles.betDetailLabel}>Winning Number:</Text>
+                            <View style={[styles.numberBadge, styles.winningNumberBadge]}>
+                              <Text style={styles.numberBadgeText}>{session.winningNumber}</Text>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={styles.betResult}>
                         <LinearGradient
-                          colors={['rgba(255, 215, 0, 0.3)', 'rgba(255, 165, 0, 0.2)']}
-                          style={styles.resultGradient}
+                          colors={
+                            session.won 
+                              ? ['rgba(78, 205, 196, 0.4)', 'rgba(68, 160, 141, 0.3)']
+                              : session.gameState === 'active'
+                              ? ['rgba(255, 193, 7, 0.4)', 'rgba(255, 152, 0, 0.3)']
+                              : ['rgba(255, 107, 107, 0.4)', 'rgba(255, 142, 83, 0.3)']
+                          }
+                          style={styles.betResultGradient}
                         >
-                          <MaterialIcons name="emoji-events" size={20} color="#FFD700" />
-                          <Text style={styles.resultText}>
-                            Winning Number: {slot.winningNumber}
+                          <MaterialIcons 
+                            name={
+                              session.won ? "celebration" : 
+                              session.gameState === 'active' ? "hourglass-empty" : "sentiment-dissatisfied"
+                            } 
+                            size={18} 
+                            color={
+                              session.won ? "#4ECDC4" : 
+                              session.gameState === 'active' ? "#FFD700" : "#FF6B6B"
+                            } 
+                          />
+                          <Text style={[
+                            styles.betResultText,
+                            { 
+                              color: session.won ? "#4ECDC4" : 
+                                    session.gameState === 'active' ? "#FFD700" : "#FF6B6B" 
+                            }
+                          ]}>
+                            {session.gameState === 'active' 
+                              ? "PENDING RESULT" 
+                              : session.won 
+                              ? `🎉 WON ₹${session.winAmount}!` 
+                              : `💔 LOST ₹${session.stake}`
+                            }
                           </Text>
                         </LinearGradient>
                       </View>
-                      
-                      {/* Win/Loss Status for User */}
+                    </LinearGradient>
+                  </Animated.View>
+                ))
+              )}
+            </>
+          ) : (
+            // Time Slots View
+            <>
+              {timeSlots.map((slot, index) => {
+                const userBet = slot.userBet;
+                const hasUserBet = !!userBet;
+                const isWinner = hasUserBet && slot.winningNumber !== null && slot.winningNumber === userBet.number;
+                
+                return (
+                  <Animated.View
+                    key={slot.id}
+                    style={styles.slotCard}
+                  >
+                    <LinearGradient
+                      colors={getSlotStatusColor(slot.status, hasUserBet)}
+                      style={styles.slotCardGradient}
+                    >
+                      <View style={styles.slotHeader}>
+                        <View style={styles.slotTimeContainer}>
+                          <MaterialIcons 
+                            name={getStatusIcon(slot.status)} 
+                            size={24} 
+                            color="#fff" 
+                          />
+                          <View style={styles.slotTitleContainer}>
+                            <Text style={styles.slotTime}>{slot.name}</Text>
+                            <Text style={styles.slotDate}>{formatDate(new Date())}</Text>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.statusBadge}>
+                          <Text style={styles.statusText}>
+                            {slot.status === 'open' ? 'LIVE' : 
+                             slot.status === 'closed' ? 'CLOSED' : 'UPCOMING'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.slotInfo}>
+                        <View style={styles.participantsContainer}>
+                          <MaterialIcons name="people" size={16} color="#fff" />
+                          <Text style={styles.participantsText}>
+                            {slot.participants} players
+                          </Text>
+                        </View>
+                        
+                        <View style={styles.payoutContainer}>
+                          <MaterialIcons name="trending-up" size={16} color="#fff" />
+                          <Text style={styles.payoutText}>{slot.payout}x payout</Text>
+                        </View>
+                      </View>
+
+                      {/* Slot Timing Info */}
+                      <View style={styles.timingInfo}>
+                        <MaterialIcons name="schedule" size={14} color="#888" />
+                        <Text style={styles.timingText}>
+                          {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
+                        </Text>
+                      </View>
+
+                      {/* User Bet Info */}
                       {hasUserBet && (
-                        <View style={styles.winLossContainer}>
+                        <View style={styles.userBetInfo}>
                           <LinearGradient
-                            colors={
-                              isWinner 
-                                ? ['rgba(78, 205, 196, 0.3)', 'rgba(68, 160, 141, 0.2)']
-                                : ['rgba(255, 107, 107, 0.3)', 'rgba(255, 142, 83, 0.2)']
-                            }
-                            style={styles.winLossGradient}
+                            colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.1)']}
+                            style={styles.userBetGradient}
                           >
-                            <MaterialIcons 
-                              name={isWinner ? "celebration" : "sentiment-dissatisfied"} 
-                              size={18} 
-                              color={isWinner ? "#4ECDC4" : "#FF6B6B"} 
-                            />
-                            <Text style={[
-                              styles.winLossText,
-                              { color: isWinner ? "#4ECDC4" : "#FF6B6B" }
-                            ]}>
-                              {isWinner 
-                                ? `🎉 YOU WON ₹${(userBet.amount * 10).toFixed(0)}!` 
-                                : `💔 YOU LOST ₹${userBet.amount}`
-                              }
+                            <MaterialIcons name="casino" size={16} color="#FFD700" />
+                            <Text style={styles.userBetText}>
+                              Your bet: {userBet.number} • ₹{userBet.amount}
                             </Text>
+                            {slot.winningNumber !== null && (
+                              <MaterialIcons 
+                                name={isWinner ? "check-circle" : "cancel"} 
+                                size={16} 
+                                color={isWinner ? "#4ECDC4" : "#FF6B6B"} 
+                              />
+                            )}
                           </LinearGradient>
                         </View>
                       )}
-                    </View>
-                  )}
 
-                  {/* Action Button */}
-                  {slot.status === 'open' && !hasUserBet && (
-                    <TouchableOpacity
-                      style={styles.joinButton}
-                      onPress={() => {
-                        setSelectedSlot(slot);
-                        setModalVisible(true);
-                      }}
-                      activeOpacity={0.8}
+                      {/* Result Display with Win/Loss */}
+                      {slot.status === 'closed' && slot.winningNumber !== null && (
+                        <View style={styles.resultSection}>
+                          <View style={styles.resultDisplay}>
+                            <LinearGradient
+                              colors={['rgba(255, 215, 0, 0.3)', 'rgba(255, 165, 0, 0.2)']}
+                              style={styles.resultGradient}
+                            >
+                              <MaterialIcons name="emoji-events" size={20} color="#FFD700" />
+                              <Text style={styles.resultText}>
+                                Winning Number: {slot.winningNumber}
+                              </Text>
+                            </LinearGradient>
+                          </View>
+                          
+                          {/* Win/Loss Status for User */}
+                          {hasUserBet && (
+                            <View style={styles.winLossContainer}>
+                              <LinearGradient
+                                colors={
+                                  isWinner 
+                                    ? ['rgba(78, 205, 196, 0.3)', 'rgba(68, 160, 141, 0.2)']
+                                    : ['rgba(255, 107, 107, 0.3)', 'rgba(255, 142, 83, 0.2)']
+                                }
+                                style={styles.winLossGradient}
+                              >
+                                <MaterialIcons 
+                                  name={isWinner ? "celebration" : "sentiment-dissatisfied"} 
+                                  size={18} 
+                                  color={isWinner ? "#4ECDC4" : "#FF6B6B"} 
+                                />
+                                <Text style={[
+                                  styles.winLossText,
+                                  { color: isWinner ? "#4ECDC4" : "#FF6B6B" }
+                                ]}>
+                                  {isWinner 
+                                    ? `🎉 YOU WON ₹${userBet.winAmount || (userBet.amount * 10)}!` 
+                                    : `💔 YOU LOST ₹${userBet.amount}`
+                                  }
+                                </Text>
+                              </LinearGradient>
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Action Button */}
+                      {slot.status === 'open' && !hasUserBet && (
+                        <TouchableOpacity
+                          style={styles.joinButton}
+                          onPress={() => {
+                            setSelectedSlot(slot);
+                            setModalVisible(true);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <LinearGradient
+                            colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
+                            style={styles.joinButtonGradient}
+                          >
+                            <MaterialIcons name="add-circle" size={20} color="#fff" />
+                            <Text style={styles.joinButtonText}>JOIN NOW</Text>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Joined Status */}
+                      {slot.status === 'open' && hasUserBet && (
+                        <View style={styles.joinedStatus}>
+                          <LinearGradient
+                            colors={['rgba(78, 205, 196, 0.3)', 'rgba(68, 160, 141, 0.2)']}
+                            style={styles.joinedStatusGradient}
+                          >
+                            <MaterialIcons name="check-circle" size={20} color="#4ECDC4" />
+                            <Text style={styles.joinedStatusText}>JOINED</Text>
+                          </LinearGradient>
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </Animated.View>
+                );
+              })}
+
+              {/* Empty State */}
+              {timeSlots.length === 0 && !isLoading && (
+                <View style={styles.emptyState}>
+                  <MaterialIcons name="schedule" size={60} color="#666" />
+                  <Text style={styles.emptyStateTitle}>No Slots Available</Text>
+                  <Text style={styles.emptyStateSubtitle}>
+                    Time slots will appear here when they become available
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.refreshButton}
+                    onPress={onRefresh}
+                  >
+                    <LinearGradient
+                      colors={['#4ECDC4', '#44A08D']}
+                      style={styles.refreshButtonGradient}
                     >
-                      <LinearGradient
-                        colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
-                        style={styles.joinButtonGradient}
-                      >
-                        <MaterialIcons name="add-circle" size={20} color="#fff" />
-                        <Text style={styles.joinButtonText}>JOIN NOW</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Joined Status */}
-                  {slot.status === 'open' && hasUserBet && (
-                    <View style={styles.joinedStatus}>
-                      <LinearGradient
-                        colors={['rgba(78, 205, 196, 0.3)', 'rgba(68, 160, 141, 0.2)']}
-                        style={styles.joinedStatusGradient}
-                      >
-                        <MaterialIcons name="check-circle" size={20} color="#4ECDC4" />
-                        <Text style={styles.joinedStatusText}>JOINED</Text>
-                      </LinearGradient>
-                    </View>
-                  )}
-                </LinearGradient>
-              </Animated.View>
-            );
-          })}
-
-          {/* Empty State */}
-          {timeSlots.length === 0 && !isLoading && (
-            <View style={styles.emptyState}>
-              <MaterialIcons name="schedule" size={60} color="#666" />
-              <Text style={styles.emptyStateTitle}>No Slots Available</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                Time slots will appear here when they become available
-              </Text>
-              <TouchableOpacity
-                style={styles.refreshButton}
-                onPress={onRefresh}
-              >
-                <LinearGradient
-                  colors={['#4ECDC4', '#44A08D']}
-                  style={styles.refreshButtonGradient}
-                >
-                  <MaterialIcons name="refresh" size={20} color="#fff" />
-                  <Text style={styles.refreshButtonText}>Refresh</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                      <MaterialIcons name="refresh" size={20} color="#fff" />
+                      <Text style={styles.refreshButtonText}>Refresh</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
 
@@ -498,6 +695,7 @@ const MatkaKingGame = () => {
                   <MaterialIcons name="casino" size={40} color="#4ECDC4" />
                   <Text style={styles.modalTitle}>Place Your Bet</Text>
                   <Text style={styles.modalSubtitle}>{selectedSlot?.name}</Text>
+                  <Text style={styles.modalDate}>{formatDate(new Date())}</Text>
                 </View>
 
                 <View style={styles.modalSection}>
@@ -687,6 +885,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 4,
   },
+  toggleContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 15,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: 'rgba(78, 205, 196, 0.3)',
+  },
+  toggleText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#4ECDC4',
+    fontWeight: 'bold',
+  },
   infoBanner: {
     marginHorizontal: 20,
     marginBottom: 15,
@@ -740,11 +965,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  slotTitleContainer: {
+    marginLeft: 8,
+  },
   slotTime: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
-    marginLeft: 8,
+  },
+  slotDate: {
+    fontSize: 12,
+    color: '#4ECDC4',
+    fontWeight: '600',
+    marginTop: 2,
   },
   statusBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -892,6 +1125,105 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 8,
   },
+  // User Bets Styles
+  betCard: {
+    marginBottom: 15,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  betCardGradient: {
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  betHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  betTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  betSlotName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 8,
+  },
+  betDateContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  betDate: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  betDetails: {
+    marginBottom: 15,
+  },
+  betDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  betDetailLabel: {
+    color: '#fff',
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  betDetailValue: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  numberBadge: {
+    backgroundColor: 'rgba(78, 205, 196, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(78, 205, 196, 0.5)',
+  },
+  winningNumberBadge: {
+    backgroundColor: 'rgba(255, 215, 0, 0.3)',
+    borderColor: 'rgba(255, 215, 0, 0.5)',
+  },
+  numberBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  betResult: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  betResultGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  betResultText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
+    textAlign: 'center',
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -976,6 +1308,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4ECDC4',
     fontWeight: '600',
+  },
+  modalDate: {
+    fontSize: 12,
+    color: '#FFD700',
+    fontWeight: '600',
+    marginTop: 2,
   },
   modalSection: {
     marginBottom: 25,

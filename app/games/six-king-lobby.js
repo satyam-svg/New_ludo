@@ -36,7 +36,7 @@ export default function SixKingLobby() {
   const gameMatch = useRef(null);
 
   const predefinedStakes = [50, 100, 250, 500, 1000, 2500];
-  const enabledStakes = [100, 1000]; // Only these stakes are enabled
+  const enabledStakes = [100, 500, 1000, 2500]; // Only these stakes are enabled
 
   const loadMatchSound = async () => {
     try {
