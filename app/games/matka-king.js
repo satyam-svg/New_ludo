@@ -42,7 +42,10 @@ const MatkaKingGame = () => {
   const [showUserBets, setShowUserBets] = useState(false);
   
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', router.back);
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      router.back();
+      return true;
+    });
     return () => {
       backHandler.remove();
     };
@@ -82,10 +85,14 @@ const MatkaKingGame = () => {
   const fetchSlots = async () => {
     try {
       setIsLoading(true);
-      const response = await apiCall('/matka-king/slots');
+      const response = await apiCall('/matka/slots');
       
       if (response.success) {
-        setTimeSlots(response.slots);
+        // Sort slots by start time, most recent first
+        const sortedSlots = response.slots.sort((a, b) => 
+          new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        );
+        setTimeSlots(sortedSlots);
       } else {
         Alert.alert('Error', 'Failed to load time slots');
       }
@@ -101,7 +108,7 @@ const MatkaKingGame = () => {
   // Fetch user sessions
   const fetchUserSessions = async () => {
     try {
-      const response = await apiCall('/matka-king/sessions');
+      const response = await apiCall('/matka/sessions');
       if (response.success) {
         setUserSessions(response.sessions);
       }
@@ -123,7 +130,7 @@ const MatkaKingGame = () => {
       fetchSlots();
       fetchUserSessions();
       
-      // Set up interval to refresh data every minute (like backend cron job)
+      // Set up interval to refresh data every minute
       const interval = setInterval(() => {
         fetchSlots();
       }, 60000);
@@ -150,7 +157,7 @@ const MatkaKingGame = () => {
     setPlacingBet(true);
     
     try {
-      const response = await apiCall('/matka-king/place-bet', 'POST', {
+      const response = await apiCall('/matka/bet', 'POST', {
         slotId: selectedSlot.id,
         number: selectedNumber,
         amount: amount
@@ -193,7 +200,7 @@ const MatkaKingGame = () => {
           ? ['rgba(120, 120, 120, 0.6)', 'rgba(100, 100, 100, 0.4)'] // Grey for joined
           : ['#4ECDC4', '#44A08D']; // Normal open color
       case 'closed': return ['rgba(120, 120, 120, 0.6)', 'rgba(100, 100, 100, 0.4)']; // Grey
-      case 'upcoming': return ['rgba(120, 120, 120, 0.6)', 'rgba(100, 100, 100, 0.4)']; // Grey
+      case 'upcoming': return ['rgba(139, 92, 246, 0.6)', 'rgba(124, 58, 237, 0.4)']; // Purple for upcoming
       default: return ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)'];
     }
   };
@@ -207,45 +214,57 @@ const MatkaKingGame = () => {
     }
   };
 
-  const formatTime = (timeFloat) => {
-    const hours = Math.floor(timeFloat);
-    const minutes = Math.round((timeFloat - hours) * 60);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
-    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  // Format time from DateTime object
+  const formatTime = (dateTimeString) => {
+    const date = new Date(dateTimeString);
+    return date.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
   };
 
-  const formatDate = (dateInput) => {
-    // Handle both string and Date object
-    let date;
-    if (typeof dateInput === 'string') {
-      // If it's a string, parse it properly
-      if (dateInput.includes('T')) {
-        // ISO string format
-        date = new Date(dateInput);
-      } else {
-        // Date only format like "2024-01-15"
-        date = new Date(dateInput + 'T00:00:00');
-      }
-    } else if (dateInput instanceof Date) {
-      date = dateInput;
+  // Format date from DateTime object
+  const formatDate = (dateTimeString) => {
+    const date = new Date(dateTimeString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Compare dates (ignore time)
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+    const tomorrowOnly = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+
+    if (dateOnly.getTime() === todayOnly.getTime()) {
+      return 'Today';
+    } else if (dateOnly.getTime() === yesterdayOnly.getTime()) {
+      return 'Yesterday';
+    } else if (dateOnly.getTime() === tomorrowOnly.getTime()) {
+      return 'Tomorrow';
     } else {
-      console.warn('Invalid date input:', dateInput);
-      return 'Invalid Date';
+      return date.toLocaleDateString('en-IN', { 
+        day: 'numeric', 
+        month: 'short',
+        year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+      });
     }
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      console.warn('Invalid date after parsing:', dateInput);
-      return 'Invalid Date';
-    }
-    
-    // Always return the actual date instead of relative terms
-    return date.toLocaleDateString('en-IN', { 
-      day: 'numeric', 
-      month: 'short',
-      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-    });
+  };
+
+  // Get time range display
+  const getTimeRange = (startTime, endTime) => {
+    return `${formatTime(startTime)} - ${formatTime(endTime)}`;
+  };
+
+  // Check if slot is currently active
+  const isSlotActive = (startTime, endTime) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    return now >= start && now < end;
   };
 
   if (isLoading && !refreshing) {
@@ -483,7 +502,8 @@ const MatkaKingGame = () => {
               {timeSlots.map((slot, index) => {
                 const userBet = slot.userBet;
                 const hasUserBet = !!userBet;
-                const isWinner = hasUserBet && slot.winningNumber !== null && slot.winningNumber === userBet.number;
+                const isWinner = hasUserBet && slot.result !== null && slot.result === userBet.number;
+                const isActive = isSlotActive(slot.startTime, slot.endTime);
                 
                 return (
                   <Animated.View
@@ -503,11 +523,14 @@ const MatkaKingGame = () => {
                           />
                           <View style={styles.slotTitleContainer}>
                             <Text style={styles.slotTime}>{slot.name}</Text>
-                            <Text style={styles.slotDate}>{formatDate(new Date())}</Text>
+                            <Text style={styles.slotDate}>{formatDate(slot.startTime)}</Text>
                           </View>
                         </View>
                         
-                        <View style={styles.statusBadge}>
+                        <View style={[
+                          styles.statusBadge,
+                          isActive && styles.statusBadgeActive
+                        ]}>
                           <Text style={styles.statusText}>
                             {slot.status === 'open' ? 'LIVE' : 
                              slot.status === 'closed' ? 'CLOSED' : 'UPCOMING'}
@@ -533,7 +556,7 @@ const MatkaKingGame = () => {
                       <View style={styles.timingInfo}>
                         <MaterialIcons name="schedule" size={14} color="#888" />
                         <Text style={styles.timingText}>
-                          {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
+                          {getTimeRange(slot.startTime, slot.endTime)}
                         </Text>
                       </View>
 
@@ -548,7 +571,7 @@ const MatkaKingGame = () => {
                             <Text style={styles.userBetText}>
                               Your bet: {userBet.number} • ₹{userBet.amount}
                             </Text>
-                            {slot.winningNumber !== null && (
+                            {slot.result !== null && (
                               <MaterialIcons 
                                 name={isWinner ? "check-circle" : "cancel"} 
                                 size={16} 
@@ -560,7 +583,7 @@ const MatkaKingGame = () => {
                       )}
 
                       {/* Result Display with Win/Loss */}
-                      {slot.status === 'closed' && slot.winningNumber !== null && (
+                      {slot.status === 'closed' && slot.result !== null && (
                         <View style={styles.resultSection}>
                           <View style={styles.resultDisplay}>
                             <LinearGradient
@@ -569,7 +592,7 @@ const MatkaKingGame = () => {
                             >
                               <MaterialIcons name="emoji-events" size={20} color="#FFD700" />
                               <Text style={styles.resultText}>
-                                Winning Number: {slot.winningNumber}
+                                Winning Number: {slot.result}
                               </Text>
                             </LinearGradient>
                           </View>
@@ -695,7 +718,12 @@ const MatkaKingGame = () => {
                   <MaterialIcons name="casino" size={40} color="#4ECDC4" />
                   <Text style={styles.modalTitle}>Place Your Bet</Text>
                   <Text style={styles.modalSubtitle}>{selectedSlot?.name}</Text>
-                  <Text style={styles.modalDate}>{formatDate(new Date())}</Text>
+                  <Text style={styles.modalDate}>
+                    {selectedSlot ? formatDate(selectedSlot.startTime) : ''}
+                  </Text>
+                  <Text style={styles.modalTime}>
+                    {selectedSlot ? getTimeRange(selectedSlot.startTime, selectedSlot.endTime) : ''}
+                  </Text>
                 </View>
 
                 <View style={styles.modalSection}>
@@ -984,6 +1012,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
+  },
+  statusBadgeActive: {
+    backgroundColor: 'rgba(78, 205, 196, 0.3)',
+    borderWidth: 1,
+    borderColor: '#4ECDC4',
   },
   statusText: {
     color: '#fff',
@@ -1312,6 +1345,12 @@ const styles = StyleSheet.create({
   modalDate: {
     fontSize: 12,
     color: '#FFD700',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  modalTime: {
+    fontSize: 12,
+    color: '#888',
     fontWeight: '600',
     marginTop: 2,
   },

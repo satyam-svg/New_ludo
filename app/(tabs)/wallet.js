@@ -30,31 +30,25 @@ const BASE_URL = config.BASE_URL;
 const DEPOSIT_AMOUNTS = [100, 200, 300, 500, 1000, 2000, 5000, 10000];
 const WITHDRAW_AMOUNTS = [200, 500, 1000, 2000, 5000, 10000, 15000, 25000];
 
-// UPI Payment apps with PNG icons
+// UPI Apps with PNG assets
 const UPI_APPS = [
   {
     id: 'phonepe',
     name: 'PhonePe',
-    packageName: 'com.phonepe.app',
     image: require('../../assets/phonepe.png'),
-    color: '#6739B7',
-    scheme: 'phonepe://'
+    color: '#6739B7'
   },
   {
     id: 'googlepay',
     name: 'Google Pay',
-    packageName: 'com.google.android.apps.nbu.paisa.user',
     image: require('../../assets/gpay.png'),
-    color: '#4285F4',
-    scheme: 'tez://'
+    color: '#4285F4'
   },
   {
     id: 'paytm',
     name: 'Paytm',
-    packageName: 'net.one97.paytm',
     image: require('../../assets/paytm.png'),
-    color: '#00BAF2',
-    scheme: 'paytmmp://'
+    color: '#00BAF2'
   }
 ];
 
@@ -135,7 +129,12 @@ export default function WalletScreen() {
       if (!response.ok) throw new Error('Failed to fetch balance');
       
       const userData = await response.json();
-      phoneNumber.current = userData.phoneNumber;
+      //console.log('User data received:', userData); // Debug log
+      
+      // Set phone number with fallback
+      phoneNumber.current = userData.phoneNumber || userData.phone || user?.phoneNumber || 'N/A';
+      //console.log('Phone number set to:', phoneNumber.current); // Debug log
+      
       setBalance(userData.wallet);
       updateWallet(userData.wallet || 0);
     } catch (error) {
@@ -178,74 +177,6 @@ export default function WalletScreen() {
     setSelectedAmount(null);
   };
 
-  const handleUpiAppSelect = async (app) => {
-    if (!validateAmount()) {
-      return;
-    }
-
-    const amount = getSelectedAmount();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setProcessingPayment(true);
-
-    try {
-      const upiIntent = generateUPIIntent(app, amount);
-      
-      if (!upiIntent) {
-        throw new Error('Failed to generate payment link');
-      }
-
-      const canOpen = await Linking.canOpenURL(upiIntent);
-      
-      if (canOpen) {
-        await Linking.openURL(upiIntent);
-        
-        try {
-          const token = await AsyncStorage.getItem('authToken');
-          const response = await fetch(`${BASE_URL}/api/payment/create-order`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              amount: amount,
-              paymentMethod: app.name,
-              identifier: phoneNumber.current
-            })
-          });
-
-          const data = await response.json();
-          
-          if (!response.ok) {
-            throw new Error(data.error || 'Failed to create deposit request');
-          }
-
-          console.log('✅ Pending deposit created:', data);
-        } catch (backendError) {
-          console.error('Backend error:', backendError);
-          Alert.alert('Notice', 'Payment initiated but may need manual verification');
-        }
-        
-        setShowPaymentPending(true);
-        setPendingTimer(60);
-        setTimeout(() => {
-          startPendingTimer();
-        }, 100);
-      } else {
-        Alert.alert(
-          'App Not Found', 
-          `${app.name} is not installed on your device. Please install ${app.name} to continue with payment.`
-        );
-      }
-      
-    } catch (error) {
-      Alert.alert('Payment Error', error.message);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setProcessingPayment(false);
-    }
-  };
-
   const getSelectedAmount = () => {
     return customAmount ? parseInt(customAmount) : selectedAmount;
   };
@@ -285,26 +216,90 @@ export default function WalletScreen() {
     return true;
   };
 
-  const generateUPIIntent = (app, amount) => {
-      const upiId = 'valid-upi@ybl';
-      const merchantName = 'Gaming Arena';
-      const transactionId = `TXN${Date.now()}`;
-      const note = `Recharge ${phoneNumber.current}`;
-      const currency = 'INR';
+  const generateUPIIntent = (amount, phoneNum) => {
+    const upiId = 'valid-upi@ybl';
+    const merchantName = 'Gaming Arena';
+    const transactionId = `TXN${Date.now()}`;
+    const note = `Recharge ${phoneNum || 'User'}`;
+    const currency = 'INR';
 
-      const query = `pa=${upiId}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tid=${transactionId}&tn=${encodeURIComponent(note)}&cu=${currency}`;
+    // Universal UPI intent that works with all UPI apps
+    const query = `pa=${upiId}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tid=${transactionId}&tn=${encodeURIComponent(note)}&cu=${currency}`;
+    
+    return `upi://pay?${query}`;
+  };
 
-      switch (app.id) {
-        case 'googlepay':
-          return `tez://upi/pay?${query}`;
-        case 'phonepe':
-          return `phonepe://upi/pay?${query}`;
-        case 'paytm':
-          return `paytmmp://pay?${query}`;
-        default:
-          return null;
+  const handleUpiPayment = async () => {
+    if (!validateAmount()) {
+      return;
+    }
+
+    const amount = getSelectedAmount();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setProcessingPayment(true);
+
+    try {
+      // Ensure we have phone number before proceeding
+      const currentPhoneNumber = phoneNumber.current || user?.phoneNumber || 'N/A';
+      //console.log('Using phone number for payment:', currentPhoneNumber); // Debug log
+      
+      const upiIntent = generateUPIIntent(amount, currentPhoneNumber);
+      
+      if (!upiIntent) {
+        throw new Error('Failed to generate payment link');
       }
-    };
+
+      const canOpen = await Linking.canOpenURL(upiIntent);
+      
+      if (canOpen) {
+        await Linking.openURL(upiIntent);
+        
+        try {
+          const token = await AsyncStorage.getItem('authToken');
+          const response = await fetch(`${BASE_URL}/api/payment/create-order`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              amount: amount,
+              paymentMethod: 'UPI',
+              identifier: currentPhoneNumber
+            })
+          });
+
+          const data = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to create deposit request');
+          }
+
+          //console.log('✅ Pending deposit created:', data);
+        } catch (backendError) {
+          console.error('Backend error:', backendError);
+          Alert.alert('Notice', 'Payment initiated but may need manual verification');
+        }
+        
+        setShowPaymentPending(true);
+        setPendingTimer(60);
+        setTimeout(() => {
+          startPendingTimer();
+        }, 100);
+      } else {
+        Alert.alert(
+          'No UPI Apps Found', 
+          'No UPI payment apps are installed on your device. Please install any UPI app (PhonePe, Google Pay, Paytm, etc.) to continue.'
+        );
+      }
+      
+    } catch (error) {
+      Alert.alert('Payment Error', error.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
 
   const initiateWithdrawal = async () => {
     if (!validateAmount()) {
@@ -340,6 +335,10 @@ export default function WalletScreen() {
     setProcessingPayment(true);
 
     try {
+      // Ensure we have phone number for withdrawal
+      const currentPhoneNumber = phoneNumber.current || user?.phoneNumber || 'N/A';
+      //console.log('Using phone number for withdrawal:', currentPhoneNumber); // Debug log
+      
       const token = await AsyncStorage.getItem('authToken');
       const response = await fetch(`${BASE_URL}/api/payment/create-withdrawl`, {
         method: 'POST',
@@ -352,7 +351,7 @@ export default function WalletScreen() {
           withdrawalMethod: 'upi_transfer',
           accountDetails: {
             upiId: withdrawalUpiId,
-            phoneNumber: phoneNumber,
+            phoneNumber: currentPhoneNumber,
           }
         })
       });
@@ -363,7 +362,7 @@ export default function WalletScreen() {
         throw new Error(data.error || 'Failed to process withdrawal');
       }
 
-      console.log('✅ Withdrawal request created:', data);
+      //console.log('✅ Withdrawal request created:', data);
       
       const newBalance = balance - amount;
       setBalance(newBalance);
@@ -659,26 +658,55 @@ export default function WalletScreen() {
                 <TouchableOpacity
                   key={app.id}
                   style={styles.upiAppCard}
-                  onPress={() => handleUpiAppSelect(app)}
+                  onPress={handleUpiPayment}
                   disabled={processingPayment}
                 >
-                  {processingPayment ? (
-                    <ActivityIndicator color={app.color} size="large" />
-                  ) : (
-                    <>
-                      <Image 
-                        source={app.image} 
-                        style={styles.upiAppImage}
-                        resizeMode="contain"
-                      />
-                      <Text style={[styles.upiAppName, { color: app.color }]}>
-                        {app.name}
-                      </Text>
-                    </>
-                  )}
+                  <LinearGradient
+                    colors={[app.color, `${app.color}CC`]}
+                    style={styles.upiAppGradient}
+                  >
+                    {processingPayment ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Image 
+                          source={app.image} 
+                          style={styles.upiAppImage}
+                          resizeMode="contain"
+                        />
+                        <Text style={styles.upiAppName}>
+                          {app.name}
+                        </Text>
+                        <Text style={styles.upiAppAmount}>
+                          ₹{getSelectedAmount()}
+                        </Text>
+                      </>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
               ))}
             </View>
+
+            {/* Universal UPI Button */}
+            <TouchableOpacity
+              style={styles.universalUpiCard}
+              onPress={handleUpiPayment}
+              disabled={processingPayment}
+            >
+              <LinearGradient
+                colors={['#4ECDC4', '#44A08D']}
+                style={styles.universalUpiGradient}
+              >
+                <MaterialIcons name="account-balance" size={24} color="#fff" />
+                <View style={styles.universalUpiContent}>
+                  <Text style={styles.universalUpiTitle}>Other UPI Apps</Text>
+                  <Text style={styles.universalUpiSubtitle}>
+                    BHIM, Amazon Pay, and more
+                  </Text>
+                </View>
+                <Text style={styles.universalUpiAmount}>₹{getSelectedAmount()}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </Animated.View>
         )}
 
@@ -731,7 +759,7 @@ export default function WalletScreen() {
             />
             <Text style={styles.infoText}>
               {activeTab === 'deposit' 
-                ? 'Your payments are 100% secure and encrypted'
+                ? 'Your payments are 100% secure and encrypted. All major UPI apps are supported.'
                 : 'Withdrawals are processed within 24 hours during business days'
               }
             </Text>
@@ -1016,21 +1044,78 @@ const styles = StyleSheet.create({
   },
   upiAppsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    marginBottom: 15,
   },
   upiAppCard: {
+    flex: 1,
+    marginHorizontal: 5,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  upiAppGradient: {
+    padding: 15,
     alignItems: 'center',
-    paddingVertical: 10,
+    minHeight: 100,
+    justifyContent: 'center',
   },
   upiAppImage: {
-    width: 48,
-    height: 48,
-    marginBottom: 6,
+    width: 32,
+    height: 32,
+    marginBottom: 8,
   },
   upiAppName: {
     fontSize: 12,
     fontWeight: 'bold',
-    marginTop: 3,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  upiAppAmount: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  universalUpiCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    marginTop: 10,
+  },
+  universalUpiGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+  },
+  universalUpiContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  universalUpiTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  universalUpiSubtitle: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.8,
+  },
+  universalUpiAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   actionButton: {
     borderRadius: 15,

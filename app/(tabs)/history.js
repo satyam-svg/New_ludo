@@ -96,12 +96,18 @@ export default function HistoryScreen() {
   const formatGameTransactions = (games) => {
     return games.map(game => {
       const isWin = game.result === 'win' || game.status === 'won' || game.won;
+      let result;
+      if (game.result === 'pending') {
+        result = 'pending';
+      } else {
+        result = isWin ? 'won' : 'lost';
+      }
       
       return {
         id: `game_${game.id || game.gameId || Math.random().toString()}`,
         type: 'game',
         game: getGameDisplayName(game.gameType || game.type),
-        result: isWin ? 'won' : 'lost',
+        result: result,
         amount: isWin ? (game.winAmount || game.amount || game.stake * 2) : -(game.stake || game.amount),
         stake: game.stake || game.stakeAmount || 0,
         opponent: game.opponent || game.opponentName || 'Player',
@@ -295,11 +301,22 @@ export default function HistoryScreen() {
 
   const renderGameTransaction = (item) => {
     const isWin = item.result === 'won';
+    const isPending = item.result === 'pending';
     const gameIcon = getGameIcon(item.game);
+
+    const gradientColors = isPending
+      ? ['#A9A9A9', '#C0C0C0'] // Grey gradient for pending
+      : isWin
+      ? ['#4ECDC4', '#44A08D']
+      : ['#FF6B6B', '#FF8E53'];
+
+    const resultText = isPending ? 'Pending' : isWin ? 'Won' : 'Lost';
+    const resultColor = isPending ? '#A9A9A9' : isWin ? '#4ECDC4' : '#FF6B6B';
+
     return (
       <View style={styles.transactionCard}>
         <LinearGradient
-          colors={isWin ? ['#4ECDC4', '#44A08D'] : ['#FF6B6B', '#FF8E53']}
+          colors={gradientColors}
           style={styles.transactionIcon}
         >
           <MaterialIcons 
@@ -312,7 +329,7 @@ export default function HistoryScreen() {
         <View style={styles.transactionDetails}>
           <Text style={styles.transactionTitle}>{item.game}</Text>
           <Text style={styles.transactionSubtitle}>
-            {isWin ? `Won` : 'Lost'}
+            {resultText}
           </Text>
           <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
         </View>
@@ -320,7 +337,7 @@ export default function HistoryScreen() {
         <View style={styles.transactionAmount}>
           <Text style={[
             styles.amountText,
-            { color: isWin ? '#4ECDC4' : '#FF6B6B' }
+            { color: resultColor }
           ]}>
             {formatCurrency(item.amount)}
           </Text>
@@ -329,6 +346,7 @@ export default function HistoryScreen() {
       </View>
     );
   };
+
 
   const getGameIcon = (gameName) => {
     switch (gameName) {
