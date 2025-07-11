@@ -217,7 +217,7 @@ export default function WalletScreen() {
   };
 
   const generateUPIIntent = (amount, phoneNum) => {
-    const upiId = 'valid-upi@ybl';
+    const upiId = 'rupammaurya157084.rzp@icici@ybl';
     const merchantName = 'Gaming Arena';
     const transactionId = `TXN${Date.now()}`;
     const note = `Recharge ${phoneNum || 'User'}`;
