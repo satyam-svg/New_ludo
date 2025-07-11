@@ -21,11 +21,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import config from '../../config';
 
 const { width } = Dimensions.get('window');
-const API_BASE_URL = `${config.BASE_URL}/api/users`;
+const API_BASE_URL = `${config.BASE_URL}/api`;
 
 export default function HistoryScreen() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('games'); // all, games
+  const [activeTab, setActiveTab] = useState('all'); // all, games, wallet
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,27 +46,42 @@ export default function HistoryScreen() {
         throw new Error('No authentication token found');
       }
 
-      // Fetch game history
-      const gameHistoryResponse = await fetch(`${API_BASE_URL}/games-history`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Fetch both game history and wallet history in parallel
+      const [gameHistoryResponse, walletHistoryResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/users/games-history`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch(`${API_BASE_URL}/payment/transactions`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      ]);
 
-      if (!gameHistoryResponse.ok) {
-        throw new Error('Failed to fetch game history');
+      let allTransactions = [];
+
+      // Process game history
+      if (gameHistoryResponse.ok) {
+        const gameHistoryData = await gameHistoryResponse.json();
+        const gameTransactions = formatGameTransactions(gameHistoryData.games || gameHistoryData || []);
+        allTransactions = [...allTransactions, ...gameTransactions];
       }
 
-      const gameHistoryData = await gameHistoryResponse.json();
 
-      // Transform game data
-      const formattedTransactions = formatGameTransactions(gameHistoryData.games || gameHistoryData || []);
+      // Process wallet history
+      if (walletHistoryResponse.ok) {
+        const walletHistoryData = await walletHistoryResponse.json();
+        const walletTransactions = formatWalletTransactions(walletHistoryData.transactions || walletHistoryData || []);
+        allTransactions = [...allTransactions, ...walletTransactions];
+      }
 
       // Sort by date (newest first)
-      formattedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-      setTransactions(formattedTransactions);
+      allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setTransactions(allTransactions);
     } catch (error) {
       console.error('Error fetching transaction history:', error);
       setError(error.message);
@@ -83,7 +98,7 @@ export default function HistoryScreen() {
       const isWin = game.result === 'win' || game.status === 'won' || game.won;
       
       return {
-        id: game.id || game.gameId || Math.random().toString(),
+        id: `game_${game.id || game.gameId || Math.random().toString()}`,
         type: 'game',
         game: getGameDisplayName(game.gameType || game.type),
         result: isWin ? 'won' : 'lost',
@@ -104,7 +119,77 @@ export default function HistoryScreen() {
     });
   };
 
-  // Format wallet transactions from API response (removed - not used)
+  // Format wallet transactions from API response
+  const formatWalletTransactions = (walletTransactions) => {
+      return walletTransactions.map(transaction => {
+        const isCredit = transaction.amount > 0;
+        const transactionType = getWalletTransactionType(transaction.type);
+        
+        // Extract status from transaction type
+        const extractStatus = (type) => {
+          if (type.includes('_pending')) return 'pending';
+          if (type.includes('_rejected')) return 'rejected';
+          if (type.includes('_completed')) return 'completed';
+          if (type === 'referral_bonus' || type === 'signup_bonus') return 'completed';
+          return 'completed'; // default status
+        };
+        
+        // Extract action type (deposit/withdrawal/bonus)
+        const extractAction = (type, amount) => {
+          if (type.startsWith('deposit')) return 'add';
+          if (type.startsWith('withdrawal')) return 'withdraw';
+          if (type.includes('bonus')) return 'bonus';
+          return amount > 0 ? 'add' : 'withdraw';
+        };
+        return {
+          id: `wallet_${transaction.id || Math.random().toString()}`,
+          type: 'wallet',
+          action: extractAction(transaction.type, transaction.amount),
+          amount: transaction.amount,
+          date: transaction.createdAt || transaction.date || new Date().toISOString(),
+          status: extractStatus(transaction.type), // Fixed: extract actual status
+          description: transaction.description || transactionType.description,
+          transactionType: transaction.type,
+          method: transaction.method || 'N/A',
+          reference: transaction.reference || null,
+          walletSpecificData: {
+            originalType: transaction.type,
+            description: transaction.description,
+            gameId: transaction.gameId
+          }
+        };
+      });
+    };
+
+  // Get wallet transaction type details
+  const getWalletTransactionType = (type) => {
+    const types = {
+      // Deposit types
+      'deposit_pending': { description: 'Deposit Pending', icon: 'hourglass-empty' },
+      'deposit_completed': { description: 'Money Added', icon: 'add-circle' },
+      'deposit_rejected': { description: 'Deposit Rejected', icon: 'cancel' },
+      
+      // Withdrawal types
+      'withdrawal_pending': { description: 'Withdrawal Pending', icon: 'hourglass-empty' },
+      'withdrawal_completed': { description: 'Money Withdrawn', icon: 'remove-circle' },
+      'withdrawal_rejected': { description: 'Withdrawal Rejected', icon: 'cancel' },
+      
+      // Game related
+      'game_win': { description: 'Game Win Bonus', icon: 'celebration' },
+      'game_loss': { description: 'Game Stake Deducted', icon: 'remove' },
+      
+      // Bonus types
+      'referral_bonus': { description: 'Referral Bonus', icon: 'card-giftcard' },
+      'signup_bonus': { description: 'Welcome Bonus', icon: 'star' },
+      
+      // Legacy types (for backward compatibility)
+      'deposit': { description: 'Money Added', icon: 'add-circle' },
+      'withdrawal': { description: 'Money Withdrawn', icon: 'remove-circle' },
+      'bonus': { description: 'Bonus Added', icon: 'star' }
+    };
+    
+    return types[type] || { description: 'Transaction', icon: 'swap-horiz' };
+  };
 
   // Get display name for different game types
   const getGameDisplayName = (gameType) => {
@@ -147,59 +232,61 @@ export default function HistoryScreen() {
     switch (activeTab) {
       case 'games':
         return transactions.filter(t => t.type === 'game');
+      case 'wallet':
+        return transactions.filter(t => t.type === 'wallet');
       default:
         return transactions;
     }
   };
 
   const formatDate = (dateString) => {
-      const date = new Date(dateString);
-      const now = new Date();
-      
-      // Create IST formatters
-      const istFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric'
-      });
-      
-      const istTimeFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      const istDateFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      // Get IST date strings for comparison
-      const istDateStr = istFormatter.format(date);
-      const istNowStr = istFormatter.format(now);
-      
-      // Calculate difference in UTC (more accurate)
-      const diffMs = now - date;
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      const diffDays = Math.floor(diffHours / 24);
+    const date = new Date(dateString);
+    const now = new Date();
+    
+    // Create IST formatters
+    const istFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric'
+    });
+    
+    const istTimeFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    
+    const istDateFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    
+    // Get IST date strings for comparison
+    const istDateStr = istFormatter.format(date);
+    const istNowStr = istFormatter.format(now);
+    
+    // Calculate difference in UTC (more accurate)
+    const diffMs = now - date;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
 
-      // Check if it's the same day in IST
-      const isSameDay = istDateStr === istNowStr;
+    // Check if it's the same day in IST
+    const isSameDay = istDateStr === istNowStr;
 
-      if (isSameDay) {
-        return istTimeFormatter.format(date);
-      } else if (diffDays < 7) {
-        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-      } else {
-        return istDateFormatter.format(date);
-      }
-    };
+    if (isSameDay) {
+      return istTimeFormatter.format(date);
+    } else if (diffDays < 7) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else {
+      return istDateFormatter.format(date);
+    }
+  };
 
   const formatCurrency = (amount) => {
     const prefix = amount >= 0 ? '+' : '';
@@ -223,11 +310,7 @@ export default function HistoryScreen() {
         </LinearGradient>
         
         <View style={styles.transactionDetails}>
-         {item.game === 'snake_game' ? (
-            <Text style={styles.transactionTitle}>Snake Game</Text>
-          ) : (
-            <Text style={styles.transactionTitle}>{item.game}</Text>
-          )}
+          <Text style={styles.transactionTitle}>{item.game}</Text>
           <Text style={styles.transactionSubtitle}>
             {isWin ? `Won` : 'Lost'}
           </Text>
@@ -255,7 +338,7 @@ export default function HistoryScreen() {
         return 'stars';
       case 'Matka King':
         return 'schedule';
-      case 'snake_game':
+      case 'Snake King':
         return 'bug-report';
       default:
         return 'games';
@@ -263,23 +346,79 @@ export default function HistoryScreen() {
   };
 
   const renderWalletTransaction = (item) => {
-    // Removed - wallet transactions not supported
-    return null;
+    const isCredit = item.amount > 0;
+    const transactionTypeInfo = getWalletTransactionType(item.transactionType);
+    
+    return (
+      <View style={styles.transactionCard}>
+        <LinearGradient
+          colors={isCredit ? ['#4ECDC4', '#44A08D'] : ['#FF6B6B', '#FF8E53']}
+          style={styles.transactionIcon}
+        >
+          <MaterialIcons 
+            name={transactionTypeInfo.icon} 
+            size={20} 
+            color="#fff" 
+          />
+        </LinearGradient>
+        
+        <View style={styles.transactionDetails}>
+          <Text style={styles.transactionTitle}>
+            {transactionTypeInfo.description}
+          </Text>
+          <Text style={styles.transactionSubtitle}>
+            {item.description || 'Wallet transaction'}
+          </Text>
+          <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
+        </View>
+        
+        <View style={styles.transactionAmount}>
+          <Text style={[
+            styles.amountText,
+            { color: isCredit ? '#4ECDC4' : '#FF6B6B' }
+          ]}>
+            {formatCurrency(item.amount)}
+          </Text>
+          {item.status && (
+            <View style={[
+              styles.statusBadge,
+              { 
+                backgroundColor: item.status === 'completed' ? '#4ECDC4' : 
+                                item.status === 'pending' ? '#FFA500' : '#FF6B6B'
+              }
+            ]}>
+              <Text style={styles.statusText}>
+                {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
   };
 
   const renderTransaction = ({ item }) => {
-    return renderGameTransaction(item);
+    return item.type === 'game' ? renderGameTransaction(item) : renderWalletTransaction(item);
   };
 
   const getTabStats = () => {
     const gameTransactions = transactions.filter(t => t.type === 'game');
+    const walletTransactions = transactions.filter(t => t.type === 'wallet');
     
     const gamesWon = gameTransactions.filter(t => t.result === 'won').length;
     const gamesLost = gameTransactions.filter(t => t.result === 'lost').length;
     const totalGameAmount = gameTransactions.reduce((sum, t) => sum + t.amount, 0);
+    
+    const walletAdded = walletTransactions
+      .filter(t => t.amount > 0)
+      .reduce((sum, t) => sum + t.amount, 0);
+    const walletWithdrawn = walletTransactions
+      .filter(t => t.amount < 0)
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
     return {
-      games: { won: gamesWon, lost: gamesLost, total: totalGameAmount }
+      games: { won: gamesWon, lost: gamesLost, total: totalGameAmount },
+      wallet: { added: walletAdded, withdrawn: walletWithdrawn }
     };
   };
 
@@ -330,7 +469,7 @@ export default function HistoryScreen() {
         <Text style={styles.headerTitle}>Transaction History</Text>
         
         {/* Stats Cards */}
-        {/* <View style={styles.statsContainer}>
+        <View style={styles.statsContainer}>
           <View style={styles.statsCard}>
             <LinearGradient
               colors={['#4ECDC4', '#44A08D']}
@@ -358,14 +497,15 @@ export default function HistoryScreen() {
               <Text style={styles.statsLabel}>Game P&L</Text>
             </LinearGradient>
           </View>
-        </View> */}
+        </View>
       </View>
 
       {/* Tab Selector */}
       <View style={styles.tabContainer}>
         {[
-          { key: 'games', label: 'All Games', icon: 'list' },
-          { key: 'wallet', label: 'Wallet History', icon: 'wallet' }
+          { key: 'all', label: 'All', icon: 'list' },
+          { key: 'games', label: 'Games', icon: 'games' },
+          { key: 'wallet', label: 'Wallet', icon: 'account-balance-wallet' }
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}
@@ -426,7 +566,9 @@ export default function HistoryScreen() {
               <Text style={styles.emptyStateSubtitle}>
                 {activeTab === 'games' 
                   ? 'Start playing games to see your game history here'
-                  : 'Your game history will appear here when you start playing'
+                  : activeTab === 'wallet'
+                  ? 'Add or withdraw money to see wallet transactions'
+                  : 'Your transaction history will appear here'
                 }
               </Text>
             </View>

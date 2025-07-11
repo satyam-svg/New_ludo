@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Pending Transactions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .mode-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .mode-btn {
+            padding: 10px 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: transparent;
+            color: white;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .mode-btn.active {
+            background: #FFD700;
+            color: #1a1a2e;
+            border-color: #FFD700;
+        }
+
+        .mode-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .mode-btn.active:hover {
+            background: #FFD700;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #FFD700;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .controls {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: #4ECDC4;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .select-all {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .table-container {
+            padding: 30px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        th.deposits-mode {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+
+        th.withdrawals-mode {
+            background: linear-gradient(135deg, #dc3545, #fd7e14);
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .amount {
+            font-weight: bold;
+        }
+
+        .amount.deposit {
+            color: #28a745;
+        }
+
+        .amount.withdrawal {
+            color: #dc3545;
+        }
+
+        .phone {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .wallet {
+            color: #FFD700;
+            font-weight: 600;
+        }
+
+        .date {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4ECDC4;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.success {
+            background: #28a745;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px;
+            color: #999;
+        }
+
+        .description {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .mode-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .mode-indicator.deposits {
+            background: #28a745;
+            color: white;
+        }
+
+        .mode-indicator.withdrawals {
+            background: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏦 Admin Dashboard</h1>
+            <p>Manage Pending Transactions</p>
+            
+            <div class="mode-toggle">
+                <button class="mode-btn active" onclick="switchMode('deposits')" id="depositsBtn">
+                    💰 Deposits
+                </button>
+                <button class="mode-btn" onclick="switchMode('withdrawals')" id="withdrawalsBtn">
+                    💸 Withdrawals
+                </button>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number" id="totalCount">-</div>
+                    <div class="stat-label">Total Pending</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="totalAmount">₹-</div>
+                    <div class="stat-label">Total Amount</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="selectedCount">0</div>
+                    <div class="stat-label">Selected</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="select-all">
+                <input type="checkbox" id="selectAll" class="checkbox">
+                <label for="selectAll">Select All</label>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-primary" onclick="loadTransactions()">🔄 Refresh</button>
+                <button class="btn btn-success" onclick="approveSelected()" id="approveBtn" disabled>✅ Approve Selected</button>
+                <button class="btn btn-danger" onclick="rejectSelected()" id="rejectBtn" disabled>❌ Reject Selected</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div id="loading" class="loading">
+                <div class="loading-spinner"></div>
+                <span id="loadingText">Loading pending deposits...</span>
+            </div>
+
+            <div id="noData" class="no-data" style="display: none;">
+                <h3 id="noDataIcon">📭</h3>
+                <h3 id="noDataTitle">No Pending Deposits</h3>
+                <p id="noDataMessage">All caught up! No deposits waiting for approval.</p>
+            </div>
+
+            <table id="transactionsTable" style="display: none;">
+                <thead>
+                    <tr id="tableHeader">
+                        <th>Select</th>
+                        <th>Transaction ID</th>
+                        <th>Phone Number</th>
+                        <th>Current Wallet</th>
+                        <th id="amountHeader">Deposit Amount</th>
+                        <th>Description</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="transactionsBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const API_BASE = 'http://192.168.1.4:5000/api'; // Change this to your API URL
+        const SECRET_KEY = 'your-super-secret-admin-key-here'; // Change this to your secret key
+        
+        let currentMode = 'deposits';
+        let transactions = [];
+        let selectedTransactions = new Set();
+
+        // Load transactions on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTransactions();
+        });
+
+        // Select all checkbox handler
+        document.getElementById('selectAll').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.transaction-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+                if (this.checked) {
+                    selectedTransactions.add(checkbox.value);
+                } else {
+                    selectedTransactions.delete(checkbox.value);
+                }
+            });
+            updateSelectedCount();
+        });
+
+        function switchMode(mode) {
+            if (currentMode === mode) return;
+            
+            currentMode = mode;
+            
+            // Update button states
+            document.getElementById('depositsBtn').classList.toggle('active', mode === 'deposits');
+            document.getElementById('withdrawalsBtn').classList.toggle('active', mode === 'withdrawals');
+            
+            // Update UI text and styling
+            updateModeUI();
+            
+            // Clear selections
+            selectedTransactions.clear();
+            document.getElementById('selectAll').checked = false;
+            updateSelectedCount();
+            
+            // Load new data
+            loadTransactions();
+        }
+
+        function updateModeUI() {
+            const isDeposits = currentMode === 'deposits';
+            const tableHeaders = document.querySelectorAll('#tableHeader th');
+            
+            // Update loading text
+            document.getElementById('loadingText').textContent = 
+                `Loading pending ${currentMode}...`;
+            
+            // Update no data section
+            document.getElementById('noDataIcon').textContent = isDeposits ? '📭' : '💳';
+            document.getElementById('noDataTitle').textContent = 
+                `No Pending ${isDeposits ? 'Deposits' : 'Withdrawals'}`;
+            document.getElementById('noDataMessage').textContent = 
+                `All caught up! No ${currentMode} waiting for approval.`;
+            
+            // Update table header
+            document.getElementById('amountHeader').textContent = 
+                `${isDeposits ? 'Deposit' : 'Withdrawal'} Amount`;
+            
+            // Update table header styling
+            tableHeaders.forEach(th => {
+                th.className = `${currentMode}-mode`;
+            });
+        }
+
+        async function loadTransactions() {
+            try {
+                showLoading(true);
+                
+                const endpoint = currentMode === 'deposits' ? 
+                    `${API_BASE}/payment/pending-deposits` : 
+                    `${API_BASE}/payment/pending-withdrawl`;
+                
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'X-Secret-Key': SECRET_KEY
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${currentMode}`);
+                }
+
+                const data = await response.json();
+                transactions = data.data || [];
+                
+                renderTransactions();
+                updateStats();
+                showToast(`${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)} loaded successfully`, 'success');
+                
+            } catch (error) {
+                console.error(`Error loading ${currentMode}:`, error);
+                showToast(`Failed to load ${currentMode}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function renderTransactions() {
+            const tbody = document.getElementById('transactionsBody');
+            const table = document.getElementById('transactionsTable');
+            const noData = document.getElementById('noData');
+            
+            if (transactions.length === 0) {
+                table.style.display = 'none';
+                noData.style.display = 'block';
+                return;
+            }
+
+            table.style.display = 'table';
+            noData.style.display = 'none';
+            
+            const isDeposits = currentMode === 'deposits';
+            const amountClass = isDeposits ? 'deposit' : 'withdrawal';
+            const amountPrefix = isDeposits ? '+' : '-';
+            
+            tbody.innerHTML = transactions.map(txn => `
+                <tr>
+                    <td>
+                        <input type="checkbox" 
+                               class="checkbox transaction-checkbox" 
+                               value="${txn.transactionId}-${txn.amount}" 
+                               data-user-id="${txn.transactionId}"
+                               data-amount="${txn.amount}"
+                               onchange="handleCheckboxChange(this)">
+                    </td>
+                    <td>${txn.transactionId}...</td>
+                    <td><span class="phone">${txn.phoneNumber}</span></td>
+                    <td><span class="wallet">₹${txn.wallet}</span></td>
+                    <td><span class="amount ${amountClass}">${amountPrefix}₹${txn.amount}</span></td>
+                    <td><span class="description" title="${txn.description || ''}">${txn.description || 'N/A'}</span></td>
+                    <td><span class="date">${new Date(txn.createdAt).toLocaleDateString()}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function handleCheckboxChange(checkbox) {
+            const key = checkbox.value;
+            if (checkbox.checked) {
+                selectedTransactions.add(key);
+            } else {
+                selectedTransactions.delete(key);
+                document.getElementById('selectAll').checked = false;
+            }
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const count = selectedTransactions.size;
+            document.getElementById('selectedCount').textContent = count;
+            
+            const approveBtn = document.getElementById('approveBtn');
+            const rejectBtn = document.getElementById('rejectBtn');
+            
+            approveBtn.disabled = count === 0;
+            rejectBtn.disabled = count === 0;
+        }
+
+        function updateStats() {
+            document.getElementById('totalCount').textContent = transactions.length;
+            
+            const totalAmount = transactions.reduce((sum, txn) => sum + txn.amount, 0);
+            document.getElementById('totalAmount').textContent = `₹${totalAmount}`;
+        }
+
+        async function approveSelected() {
+            if (selectedTransactions.size === 0) return;
+            
+            const actionText = currentMode === 'deposits' ? 'approve' : 'approve';
+            if (!confirm(`${actionText.charAt(0).toUpperCase() + actionText.slice(1)} ${selectedTransactions.size} ${currentMode}?`)) return;
+            
+            await processSelected('approve');
+        }
+
+        async function rejectSelected() {
+            if (selectedTransactions.size === 0) return;
+            
+            if (!confirm(`Reject ${selectedTransactions.size} ${currentMode}?`)) return;
+            
+            await processSelected('reject');
+        }
+
+        async function processSelected(action) {
+            try {
+                const transactionsList = Array.from(selectedTransactions).map(key => {
+                    const checkbox = document.querySelector(`input[value="${key}"]`);
+                    return {
+                        id: checkbox.dataset.userId,
+                        status: action,
+                        amount: parseFloat(checkbox.dataset.amount)
+                    };
+                });
+
+                const endpoint = currentMode === 'deposits' ? 
+                    `${API_BASE}/payment/update-deposits` : 
+                    `${API_BASE}/payment/update-withdrawl`;
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Secret-Key': SECRET_KEY
+                    },
+                    body: JSON.stringify({
+                        transactions: transactionsList
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to ${action} ${currentMode}`);
+                }
+
+                showToast(`Successfully ${action}d ${selectedTransactions.size} ${currentMode}`, 'success');
+                
+                // Reset selections and reload
+                selectedTransactions.clear();
+                document.getElementById('selectAll').checked = false;
+                loadTransactions();
+                
+            } catch (error) {
+                console.error(`Error ${action}ing ${currentMode}:`, error);
+                showToast(`Failed to ${action} ${currentMode}`, 'error');
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            document.getElementById('transactionsTable').style.display = show ? 'none' : 'table';
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
