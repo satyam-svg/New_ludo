@@ -13,7 +13,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,8 @@
       },
       "usesCleartextTraffic": true,
       "edgeToEdgeEnabled": true,
-      "package": "com.ontop.BetBoss"
+      "package": "com.ontop.BetBoss",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "favicon": "./assets/icon.png"
@@ -35,6 +39,9 @@
       "eas": {
         "projectId": "eb26ec85-c779-4ca5-9dac-d1e18ac30c00"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/eb26ec85-c779-4ca5-9dac-d1e18ac30c00"
     }
   }
 }

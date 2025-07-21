@@ -10,15 +10,14 @@ import {
   Dimensions,
   ActivityIndicator,
   Modal,
-  Linking,
-  BackHandler,
   TextInput,
-  Image
+  BackHandler
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../../hooks/useAuth';
 import { router } from 'expo-router';
 
@@ -26,31 +25,11 @@ const { width } = Dimensions.get('window');
 import config from '../../config';
 const BASE_URL = config.BASE_URL;
 
-// Predefined amounts
-const DEPOSIT_AMOUNTS = [100, 200, 300, 500, 1000, 2000, 5000, 10000];
+// Predefined amounts for withdrawal only
 const WITHDRAW_AMOUNTS = [200, 500, 1000, 2000, 5000, 10000, 15000, 25000];
 
-// UPI Apps with PNG assets
-const UPI_APPS = [
-  {
-    id: 'phonepe',
-    name: 'PhonePe',
-    image: require('../../assets/phonepe.png'),
-    color: '#6739B7'
-  },
-  {
-    id: 'googlepay',
-    name: 'Google Pay',
-    image: require('../../assets/gpay.png'),
-    color: '#4285F4'
-  },
-  {
-    id: 'paytm',
-    name: 'Paytm',
-    image: require('../../assets/paytm.png'),
-    color: '#00BAF2'
-  }
-];
+// Fallback UPI ID
+const FALLBACK_UPI_IDS = [{ id: '1', upiId: 'user1@upi' }];
 
 export default function WalletScreen() {
   const { user, updateWallet } = useAuth();
@@ -65,11 +44,16 @@ export default function WalletScreen() {
   const [showWithdrawPending, setShowWithdrawPending] = useState(false);
   const [pendingTimer, setPendingTimer] = useState(60);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [upiIds, setUpiIds] = useState([]);
+  const [loadingUpiIds, setLoadingUpiIds] = useState(false);
+  const [selectedUpiId, setSelectedUpiId] = useState(null);
+  const [userPhoneNumber, setUserPhoneNumber] = useState('');
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const timerRef = useRef(null);
+  const upiScaleAnims = useRef({}).current;
 
   useEffect(() => {
     Animated.timing(slideAnim, {
@@ -88,7 +72,7 @@ export default function WalletScreen() {
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 1000,
-          useNativeDriver: true, 
+          useNativeDriver: true,
         }),
       ])
     );
@@ -101,6 +85,15 @@ export default function WalletScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    // Initialize or update upiScaleAnims when upiIds changes
+    upiIds.forEach((upi) => {
+      if (!upiScaleAnims[upi.id]) {
+        upiScaleAnims[upi.id] = new Animated.Value(1);
+      }
+    });
+  }, [upiIds]);
 
   useEffect(() => {
     if (showPaymentPending || showWithdrawPending) {
@@ -119,36 +112,59 @@ export default function WalletScreen() {
         setLoadingBalance(false);
         return;
       }
-      
+
       const response = await fetch(`${BASE_URL}/api/users/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch balance');
-      
+
+      if (!response.ok) throw new Error(`Failed to fetch balance: ${response.status}`);
+
       const userData = await response.json();
-      //console.log('User data received:', userData); // Debug log
-      
-      // Set phone number with fallback
       phoneNumber.current = userData.phoneNumber || userData.phone || user?.phoneNumber || 'N/A';
-      //console.log('Phone number set to:', phoneNumber.current); // Debug log
-      
-      setBalance(userData.wallet);
+      setBalance(userData.wallet || 0);
       updateWallet(userData.wallet || 0);
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch wallet balance');
-      console.error(error);
       setBalance(0);
     } finally {
       setLoadingBalance(false);
     }
   };
 
+  const fetchUpiIds = async () => {
+    setLoadingUpiIds(true);
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      const response = await fetch(`${BASE_URL}/api/upi-ids`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (Array.isArray(data) && data.length > 0) {
+        setUpiIds(data);
+      } else {
+        setUpiIds(FALLBACK_UPI_IDS);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch UPI IDs, using fallback ID');
+      setUpiIds(FALLBACK_UPI_IDS);
+    } finally {
+      setLoadingUpiIds(false);
+    }
+  };
+
   useEffect(() => {
     fetchWalletBalance();
-  }, []);
+    if (activeTab === 'deposit') {
+      fetchUpiIds();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     return () => {
@@ -164,12 +180,8 @@ export default function WalletScreen() {
     setSelectedAmount(null);
     setCustomAmount('');
     setWithdrawalUpiId('');
-  };
-
-  const handleAmountSelect = (amount) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedAmount(amount);
-    setCustomAmount('');
+    setSelectedUpiId(null);
+    setUserPhoneNumber('');
   };
 
   const handleCustomAmountChange = (text) => {
@@ -183,7 +195,7 @@ export default function WalletScreen() {
 
   const validateAmount = () => {
     const amount = getSelectedAmount();
-    
+
     if (!amount || isNaN(amount) || amount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount');
       return false;
@@ -216,21 +228,18 @@ export default function WalletScreen() {
     return true;
   };
 
-  const generateUPIIntent = (amount, phoneNum) => {
-    const upiId = 'rupammaurya157084.rzp@icici@ybl';
-    const merchantName = 'Gaming Arena';
-    const transactionId = `TXN${Date.now()}`;
-    const note = `Recharge ${phoneNum || 'User'}`;
-    const currency = 'INR';
-
-    // Universal UPI intent that works with all UPI apps
-    const query = `pa=${upiId}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tid=${transactionId}&tn=${encodeURIComponent(note)}&cu=${currency}`;
-    
-    return `upi://pay?${query}`;
-  };
-
-  const handleUpiPayment = async () => {
+  const handleDepositDone = async () => {
     if (!validateAmount()) {
+      return;
+    }
+
+    if (!selectedUpiId) {
+      Alert.alert('UPI ID Required', 'Please select a UPI ID to proceed');
+      return;
+    }
+
+    if (!/^[6-9]\d{9}$/.test(userPhoneNumber)) {
+      Alert.alert('Invalid Phone Number', 'Please enter a valid 10-digit phone number starting with 6-9');
       return;
     }
 
@@ -239,62 +248,34 @@ export default function WalletScreen() {
     setProcessingPayment(true);
 
     try {
-      // Ensure we have phone number before proceeding
-      const currentPhoneNumber = phoneNumber.current || user?.phoneNumber || 'N/A';
-      //console.log('Using phone number for payment:', currentPhoneNumber); // Debug log
-      
-      const upiIntent = generateUPIIntent(amount, currentPhoneNumber);
-      
-      if (!upiIntent) {
-        throw new Error('Failed to generate payment link');
+      const token = await AsyncStorage.getItem('authToken');
+      const response = await fetch(`${BASE_URL}/api/payment/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          amount: amount,
+          upiId: selectedUpiId,
+          phoneNumber: userPhoneNumber,
+          paymentMethod: 'UPI'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create deposit request');
       }
 
-      const canOpen = await Linking.canOpenURL(upiIntent);
-      
-      if (canOpen) {
-        await Linking.openURL(upiIntent);
-        
-        try {
-          const token = await AsyncStorage.getItem('authToken');
-          const response = await fetch(`${BASE_URL}/api/payment/create-order`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              amount: amount,
-              paymentMethod: 'UPI',
-              identifier: currentPhoneNumber
-            })
-          });
-
-          const data = await response.json();
-          
-          if (!response.ok) {
-            throw new Error(data.error || 'Failed to create deposit request');
-          }
-
-          //console.log('✅ Pending deposit created:', data);
-        } catch (backendError) {
-          console.error('Backend error:', backendError);
-          Alert.alert('Notice', 'Payment initiated but may need manual verification');
-        }
-        
-        setShowPaymentPending(true);
-        setPendingTimer(60);
-        setTimeout(() => {
-          startPendingTimer();
-        }, 100);
-      } else {
-        Alert.alert(
-          'No UPI Apps Found', 
-          'No UPI payment apps are installed on your device. Please install any UPI app (PhonePe, Google Pay, Paytm, etc.) to continue.'
-        );
-      }
-      
+      setShowPaymentPending(true);
+      setPendingTimer(60);
+      setTimeout(() => {
+        startPendingTimer();
+      }, 100);
     } catch (error) {
-      Alert.alert('Payment Error', error.message);
+      Alert.alert('Deposit Error', error.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setProcessingPayment(false);
@@ -312,7 +293,7 @@ export default function WalletScreen() {
     }
 
     const amount = getSelectedAmount();
-    
+
     Alert.alert(
       'Confirm Withdrawal',
       `Are you sure you want to withdraw ₹${amount} to ${withdrawalUpiId}?\n\nThis amount will be processed within 24 hours.`,
@@ -335,10 +316,7 @@ export default function WalletScreen() {
     setProcessingPayment(true);
 
     try {
-      // Ensure we have phone number for withdrawal
       const currentPhoneNumber = phoneNumber.current || user?.phoneNumber || 'N/A';
-      //console.log('Using phone number for withdrawal:', currentPhoneNumber); // Debug log
-      
       const token = await AsyncStorage.getItem('authToken');
       const response = await fetch(`${BASE_URL}/api/payment/create-withdrawl`, {
         method: 'POST',
@@ -357,21 +335,18 @@ export default function WalletScreen() {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to process withdrawal');
+        throw new Error(data.error || 'Failed to create withdrawal request');
       }
 
-      //console.log('✅ Withdrawal request created:', data);
-      
       const newBalance = balance - amount;
       setBalance(newBalance);
       updateWallet(newBalance);
-      
+
       setShowWithdrawPending(true);
-      
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
     } catch (error) {
       Alert.alert('Withdrawal Error', error.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -384,7 +359,7 @@ export default function WalletScreen() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
-    
+
     timerRef.current = setInterval(() => {
       setPendingTimer((prev) => {
         if (prev <= 1) {
@@ -406,14 +381,16 @@ export default function WalletScreen() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    
+
     setSelectedAmount(null);
     setCustomAmount('');
     setWithdrawalUpiId('');
     setShowPaymentPending(false);
     setShowWithdrawPending(false);
     setPendingTimer(60);
-    
+    setSelectedUpiId(null);
+    setUserPhoneNumber('');
+
     router.push('/');
   };
 
@@ -428,7 +405,32 @@ export default function WalletScreen() {
   };
 
   const getCurrentAmounts = () => {
-    return activeTab === 'deposit' ? DEPOSIT_AMOUNTS : WITHDRAW_AMOUNTS;
+    return activeTab === 'withdraw' ? WITHDRAW_AMOUNTS : [];
+  };
+
+  const copyUpiId = (upiId) => {
+    Clipboard.setStringAsync(upiId);
+    Alert.alert('Copied', `UPI ID ${upiId} copied to clipboard`);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleUpiPress = (upiId, id) => {
+    // Ensure Animated.Value exists for this UPI ID
+    if (!upiScaleAnims[id]) {
+      upiScaleAnims[id] = new Animated.Value(1);
+    }
+    setSelectedUpiId(upiId);
+    Animated.spring(upiScaleAnims[id], {
+      toValue: 1.05,
+      friction: 5,
+      useNativeDriver: true,
+    }).start(() => {
+      Animated.spring(upiScaleAnims[id], {
+        toValue: 1,
+        friction: 5,
+        useNativeDriver: true,
+      }).start();
+    });
   };
 
   return (
@@ -477,10 +479,10 @@ export default function WalletScreen() {
             ]}
             onPress={() => handleTabChange('deposit')}
           >
-            <MaterialIcons 
-              name="add-circle" 
-              size={20} 
-              color={activeTab === 'deposit' ? '#1a1a2e' : '#888'} 
+            <MaterialIcons
+              name="add-circle"
+              size={20}
+              color={activeTab === 'deposit' ? '#1a1a2e' : '#888'}
             />
             <Text style={[
               styles.tabText,
@@ -489,7 +491,7 @@ export default function WalletScreen() {
               Deposit
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               styles.tab,
@@ -497,10 +499,10 @@ export default function WalletScreen() {
             ]}
             onPress={() => handleTabChange('withdraw')}
           >
-            <MaterialIcons 
-              name="remove-circle" 
-              size={20} 
-              color={activeTab === 'withdraw' ? '#1a1a2e' : '#888'} 
+            <MaterialIcons
+              name="remove-circle"
+              size={20}
+              color={activeTab === 'withdraw' ? '#1a1a2e' : '#888'}
             />
             <Text style={[
               styles.tabText,
@@ -511,77 +513,225 @@ export default function WalletScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Amount Selection */}
-        <Animated.View 
-          style={[
-            styles.section,
-            {
-              opacity: slideAnim,
-              transform: [
-                {
-                  translateY: slideAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Text style={styles.sectionTitle}>
-            Select Amount {activeTab === 'withdraw' ? '(Min ₹200)' : '(Min ₹100)'}
-          </Text>
-          
-          <View style={styles.amountsGrid}>
-            {getCurrentAmounts().map((amount, index) => (
-              <Animated.View
-                key={amount}
-                style={[
-                  { transform: [{ scale: selectedAmount === amount ? pulseAnim : 1 }] }
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.amountCard,
-                    selectedAmount === amount && styles.amountCardSelected,
-                    activeTab === 'withdraw' && amount > balance && styles.amountCardDisabled
-                  ]}
-                  onPress={() => handleAmountSelect(amount)}
-                  disabled={activeTab === 'withdraw' && amount > balance}
-                >
-                  <LinearGradient
-                    colors={
-                      selectedAmount === amount
-                        ? activeTab === 'deposit' 
-                          ? ['#4ECDC4', '#44A08D']
-                          : ['#FF6B6B', '#FF8E53']
-                        : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']
-                    }
-                    style={styles.amountCardGradient}
-                  >
-                    <Text style={[
-                      styles.amountText,
-                      selectedAmount === amount && styles.amountTextSelected,
-                      activeTab === 'withdraw' && amount > balance && styles.amountTextDisabled
-                    ]}>
-                      ₹{amount}
-                    </Text>
-                    {selectedAmount === amount && (
-                      <MaterialIcons name="check-circle" size={12} color="#fff" />
-                    )}
-                    {activeTab === 'withdraw' && amount > balance && (
-                      <MaterialIcons name="lock" size={12} color="#666" />
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
+        {/* Deposit Instructions */}
+        {activeTab === 'deposit' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>How to Deposit Money</Text>
+            <View style={styles.infoCard}>
+              <MaterialIcons name="info" size={20} color="#4ECDC4" />
+              <Text style={styles.infoText}>
+                UPI ID ko yaha se copy karein, kisi bhi UPI app (jaise PhonePe, Google Pay) mein jake ₹100 se zyada ka payment karein. Phir wapas aake apna phone number daalein jisse payment kiya aur "Deposit Done" button dabayein.
+                {'\n\n'}
+                Copy UPI ID from here, go to any UPI app and pay more than ₹100. Then come back, enter the phone number used for payment, and click "Deposit Done".
+              </Text>
+            </View>
           </View>
+        )}
 
-          {/* Custom Amount Input - Only for Withdraw */}
-          {activeTab === 'withdraw' && (
+        {/* UPI ID List for Deposit */}
+        {activeTab === 'deposit' && (
+          <Animated.View
+            style={[
+              styles.section,
+              {
+                opacity: slideAnim,
+                transform: [
+                  {
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [30, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.sectionTitle}>Select UPI ID</Text>
+            {loadingUpiIds ? (
+              <ActivityIndicator color="#fff" size="large" />
+            ) : upiIds.length === 0 ? (
+              <Text style={styles.noUpiText}>No UPI IDs available</Text>
+            ) : (
+              <View style={styles.upiListContainer}>
+                {upiIds.map((upi) => (
+                  <Animated.View
+                    key={upi.id}
+                    style={{
+                      transform: [{ scale: upiScaleAnims[upi.id] || 1 }],
+                    }}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.upiListItem,
+                        selectedUpiId === upi.upiId && styles.upiListItemSelected,
+                      ]}
+                      onPress={() => handleUpiPress(upi.upiId, upi.id)}
+                    >
+                      <LinearGradient
+                        colors={
+                          selectedUpiId === upi.upiId
+                            ? ['#4ECDC4', '#44A08D']
+                            : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']
+                        }
+                        style={styles.upiListItemGradient}
+                      >
+                        <View style={styles.upiListItemContent}>
+                          <Text style={styles.upiListItemText}>{upi.upiId}</Text>
+                          <View style={styles.upiActions}>
+                            <TouchableOpacity onPress={() => copyUpiId(upi.upiId)}>
+                              <MaterialIcons name="content-copy" size={18} color="#fff" />
+                            </TouchableOpacity>
+                            {selectedUpiId === upi.upiId && (
+                              <MaterialIcons name="check-circle" size={18} color="#fff" />
+                            )}
+                          </View>
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
+            )}
+          </Animated.View>
+        )}
+
+        {/* Amount Selection for Deposit */}
+        {activeTab === 'deposit' && (
+          <Animated.View
+            style={[
+              styles.section,
+              {
+                opacity: slideAnim,
+                transform: [
+                  {
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [50, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.sectionTitle}>Enter Amount (Min ₹100)</Text>
             <View style={styles.customAmountSection}>
-              <Text style={styles.customAmountLabel}>Or enter custom amount:</Text>
+              <Text style={styles.customAmountLabel}>Enter custom amount:</Text>
+              <View style={styles.customAmountContainer}>
+                <Text style={styles.currencySymbol}>₹</Text>
+                <TextInput
+                  style={[styles.customAmountInput, customAmount && styles.customAmountInputActive]}
+                  placeholder="Enter amount (Min ₹100)"
+                  placeholderTextColor="#888"
+                  value={customAmount}
+                  onChangeText={handleCustomAmountChange}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+              </View>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Phone Number Input for Deposit */}
+        {activeTab === 'deposit' && customAmount && (
+          <Animated.View
+            style={[
+              styles.section,
+              {
+                opacity: slideAnim,
+                transform: [
+                  {
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [30, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.sectionTitle}>Enter Payment Phone Number</Text>
+            <View style={styles.upiInputContainer}>
+              <MaterialIcons name="phone" size={20} color="#4ECDC4" />
+              <TextInput
+                style={[styles.upiInput, userPhoneNumber && styles.upiInputActive]}
+                placeholder="Enter 10-digit phone number"
+                placeholderTextColor="#888"
+                value={userPhoneNumber}
+                onChangeText={setUserPhoneNumber}
+                keyboardType="phone-pad"
+                maxLength={10}
+              />
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Amount Selection for Withdraw */}
+        {activeTab === 'withdraw' && (
+          <Animated.View
+            style={[
+              styles.section,
+              {
+                opacity: slideAnim,
+                transform: [
+                  {
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [50, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.sectionTitle}>Enter Amount (Min ₹200)</Text>
+            <View style={styles.amountsGrid}>
+              {getCurrentAmounts().map((amount, index) => (
+                <Animated.View
+                  key={amount}
+                  style={[{ transform: [{ scale: selectedAmount === amount ? pulseAnim : 1 }] }]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.amountCard,
+                      selectedAmount === amount && styles.amountCardSelected,
+                      amount > balance && styles.amountCardDisabled
+                    ]}
+                    onPress={() => {
+                      setSelectedAmount(amount);
+                      setCustomAmount('');
+                    }}
+                    disabled={amount > balance}
+                  >
+                    <LinearGradient
+                      colors={
+                        selectedAmount === amount
+                          ? ['#FF6B6B', '#FF8E53']
+                          : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']
+                      }
+                      style={styles.amountCardGradient}
+                    >
+                      <Text style={[
+                        styles.amountText,
+                        selectedAmount === amount && styles.amountTextSelected,
+                        amount > balance && styles.amountTextDisabled
+                      ]}>
+                        ₹{amount}
+                      </Text>
+                      {selectedAmount === amount && (
+                        <MaterialIcons name="check-circle" size={12} color="#fff" />
+                      )}
+                      {amount > balance && (
+                        <MaterialIcons name="lock" size={12} color="#666" />
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </Animated.View>
+              ))}
+            </View>
+
+            <View style={styles.customAmountSection}>
+              <Text style={styles.customAmountLabel}>Enter custom amount:</Text>
               <View style={styles.customAmountContainer}>
                 <Text style={styles.currencySymbol}>₹</Text>
                 <TextInput
@@ -595,12 +745,12 @@ export default function WalletScreen() {
                 />
               </View>
             </View>
-          )}
-        </Animated.View>
+          </Animated.View>
+        )}
 
         {/* UPI ID Input for Withdrawal */}
         {activeTab === 'withdraw' && (selectedAmount || customAmount) && (
-          <Animated.View 
+          <Animated.View
             style={[
               styles.section,
               {
@@ -617,7 +767,6 @@ export default function WalletScreen() {
             ]}
           >
             <Text style={styles.sectionTitle}>Enter UPI ID or Phone Number</Text>
-            
             <View style={styles.upiInputContainer}>
               <MaterialIcons name="account-balance" size={20} color="#FF6B6B" />
               <TextInput
@@ -633,86 +782,9 @@ export default function WalletScreen() {
           </Animated.View>
         )}
 
-        {/* UPI Payment Options (Only for Deposits) */}
-        {activeTab === 'deposit' && (selectedAmount || customAmount) && (
-          <Animated.View 
-            style={[
-              styles.section,
-              {
-                opacity: slideAnim,
-                transform: [
-                  {
-                    translateY: slideAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [30, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <Text style={styles.sectionTitle}>Choose Payment Method</Text>
-            
-            <View style={styles.upiAppsContainer}>
-              {UPI_APPS.map((app) => (
-                <TouchableOpacity
-                  key={app.id}
-                  style={styles.upiAppCard}
-                  onPress={handleUpiPayment}
-                  disabled={processingPayment}
-                >
-                  <LinearGradient
-                    colors={[app.color, `${app.color}CC`]}
-                    style={styles.upiAppGradient}
-                  >
-                    {processingPayment ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <>
-                        <Image 
-                          source={app.image} 
-                          style={styles.upiAppImage}
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.upiAppName}>
-                          {app.name}
-                        </Text>
-                        <Text style={styles.upiAppAmount}>
-                          ₹{getSelectedAmount()}
-                        </Text>
-                      </>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Universal UPI Button */}
-            <TouchableOpacity
-              style={styles.universalUpiCard}
-              onPress={handleUpiPayment}
-              disabled={processingPayment}
-            >
-              <LinearGradient
-                colors={['#4ECDC4', '#44A08D']}
-                style={styles.universalUpiGradient}
-              >
-                <MaterialIcons name="account-balance" size={24} color="#fff" />
-                <View style={styles.universalUpiContent}>
-                  <Text style={styles.universalUpiTitle}>Other UPI Apps</Text>
-                  <Text style={styles.universalUpiSubtitle}>
-                    BHIM, Amazon Pay, and more
-                  </Text>
-                </View>
-                <Text style={styles.universalUpiAmount}>₹{getSelectedAmount()}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-
-        {/* Withdraw Button */}
-        {activeTab === 'withdraw' && (selectedAmount || customAmount) && withdrawalUpiId.trim() && (
-          <Animated.View 
+        {/* Action Button */}
+        {(selectedAmount || customAmount) && (
+          <Animated.View
             style={[
               styles.section,
               {
@@ -726,22 +798,28 @@ export default function WalletScreen() {
                 styles.actionButton,
                 processingPayment && styles.actionButtonDisabled
               ]}
-              onPress={initiateWithdrawal}
+              onPress={activeTab === 'deposit' ? handleDepositDone : initiateWithdrawal}
               disabled={processingPayment}
             >
               <LinearGradient
-                colors={['#FF6B6B', '#FF8E53']}
+                colors={activeTab === 'deposit' ? ['#4ECDC4', '#44A08D'] : ['#FF6B6B', '#FF8E53']}
                 style={styles.actionButtonGradient}
               >
                 {processingPayment ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <MaterialIcons name="money-off" size={24} color="#fff" />
+                  <MaterialIcons
+                    name={activeTab === 'deposit' ? 'check-circle' : 'money-off'}
+                    size={24}
+                    color="#fff"
+                  />
                 )}
                 <Text style={styles.actionButtonText}>
-                  {processingPayment 
-                    ? 'Processing...' 
-                    : `Withdraw ₹${getSelectedAmount()}`
+                  {processingPayment
+                    ? 'Processing...'
+                    : activeTab === 'deposit'
+                      ? 'Deposit Done'
+                      : `Withdraw ₹${getSelectedAmount()}`
                   }
                 </Text>
               </LinearGradient>
@@ -752,16 +830,15 @@ export default function WalletScreen() {
         {/* Info Section */}
         <View style={styles.infoSection}>
           <View style={styles.infoCard}>
-            <MaterialIcons 
-              name={activeTab === 'deposit' ? 'security' : 'info'} 
-              size={20} 
-              color={activeTab === 'deposit' ? '#4ECDC4' : '#FF6B6B'} 
+            <MaterialIcons
+              name={activeTab === 'deposit' ? 'security' : 'info'}
+              size={20}
+              color={activeTab === 'deposit' ? '#4ECDC4' : '#FF6B6B'}
             />
             <Text style={styles.infoText}>
-              {activeTab === 'deposit' 
-                ? 'Your payments are 100% secure and encrypted. All major UPI apps are supported.'
-                : 'Withdrawals are processed within 24 hours during business days'
-              }
+              {activeTab === 'deposit'
+                ? 'Your payments are 100% secure. Please make the payment to the selected UPI ID.'
+                : 'Withdrawals are processed within 24 hours during business days'}
             </Text>
           </View>
         </View>
@@ -787,7 +864,7 @@ export default function WalletScreen() {
               <Text style={styles.pendingMessage}>
                 Your payment is being processed. Amount will be deposited in 5-10 minutes after verification.
               </Text>
-              
+
               <View style={styles.timerContainer}>
                 <MaterialIcons name="timer" size={20} color="#1a1a2e" />
                 <Text style={styles.timerText}>
@@ -824,10 +901,10 @@ export default function WalletScreen() {
               <MaterialIcons name="check-circle" size={48} color="#fff" />
               <Text style={styles.pendingTitle}>Withdrawal Initiated</Text>
               <Text style={styles.pendingMessage}>
-                Your withdrawal request has been submitted successfully. 
+                Your withdrawal request has been submitted successfully.
                 The amount will be transferred to your account within 24 hours.
               </Text>
-              
+
               <View style={styles.withdrawalInfoContainer}>
                 <View style={styles.withdrawalInfoRow}>
                   <MaterialIcons name="schedule" size={16} color="#fff" />
@@ -867,33 +944,33 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#fff',
     textAlign: 'center',
   },
   headerSpacer: {
-    width: 40,
+    width: 44,
   },
   balanceCard: {
     marginHorizontal: 20,
     marginBottom: 30,
     borderRadius: 15,
     overflow: 'hidden',
-    elevation: 5,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   balanceGradient: {
     flexDirection: 'row',
@@ -904,12 +981,12 @@ const styles = StyleSheet.create({
     marginLeft: 15,
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#1a1a2e',
     opacity: 0.8,
   },
   balanceAmount: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#1a1a2e',
   },
@@ -934,7 +1011,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     marginLeft: 8,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: '#888',
   },
@@ -946,10 +1023,10 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 20,
+    marginBottom: 15,
   },
   amountsGrid: {
     flexDirection: 'row',
@@ -996,11 +1073,15 @@ const styles = StyleSheet.create({
   },
   customAmountSection: {
     marginTop: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 15,
   },
   customAmountLabel: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 16,
+    color: '#fff',
     marginBottom: 10,
+    fontWeight: '600',
   },
   customAmountContainer: {
     flexDirection: 'row',
@@ -1012,7 +1093,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   currencySymbol: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#FFD700',
     marginRight: 10,
@@ -1023,6 +1104,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#fff',
     fontWeight: '600',
+  },
+  customAmountInputActive: {
+    borderColor: '#4ECDC4',
+    borderWidth: 1,
+    borderRadius: 15,
   },
   upiInputContainer: {
     flexDirection: 'row',
@@ -1042,89 +1128,63 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontWeight: '500',
   },
-  upiAppsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+  upiInputActive: {
+    borderColor: '#4ECDC4',
+    borderWidth: 1,
+    borderRadius: 15,
   },
-  upiAppCard: {
-    flex: 1,
-    marginHorizontal: 5,
-    borderRadius: 12,
+  upiListContainer: {
+    flexDirection: 'column',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 10,
+  },
+  upiListItem: {
+    marginBottom: 10,
+    borderRadius: 10,
     overflow: 'hidden',
-    elevation: 5,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  upiAppGradient: {
-    padding: 15,
-    alignItems: 'center',
-    minHeight: 100,
-    justifyContent: 'center',
-  },
-  upiAppImage: {
-    width: 32,
-    height: 32,
-    marginBottom: 8,
-  },
-  upiAppName: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  upiAppAmount: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  universalUpiCard: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
     shadowRadius: 3,
-    marginTop: 10,
   },
-  universalUpiGradient: {
+  upiListItemSelected: {
+    elevation: 8,
+    shadowOpacity: 0.5,
+  },
+  upiListItemGradient: {
+    padding: 15,
+  },
+  upiListItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    justifyContent: 'space-between',
   },
-  universalUpiContent: {
-    flex: 1,
-    marginLeft: 12,
+  upiListItemText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
   },
-  universalUpiTitle: {
+  upiActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  noUpiText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 2,
-  },
-  universalUpiSubtitle: {
-    fontSize: 12,
-    color: '#fff',
-    opacity: 0.8,
-  },
-  universalUpiAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+    color: '#888',
+    textAlign: 'center',
+    padding: 20,
   },
   actionButton: {
     borderRadius: 15,
     overflow: 'hidden',
-    elevation: 5,
+    elevation: 6,
     shadowColor: '#4ECDC4',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   actionButtonDisabled: {
     opacity: 0.7,
@@ -1133,11 +1193,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 18,
+    paddingVertical: 20,
   },
   actionButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     marginLeft: 10,
   },
@@ -1156,15 +1216,14 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    color: '#888',
-    fontSize: 12,
+    color: '#fff',
+    fontSize: 14,
     marginLeft: 10,
-    lineHeight: 16,
+    lineHeight: 20,
   },
   bottomPadding: {
     height: 20,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
