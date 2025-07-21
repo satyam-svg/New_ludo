@@ -238,8 +238,8 @@ export default function WalletScreen() {
       return;
     }
 
-    if (!/^[6-9]\d{9}$/.test(userPhoneNumber)) {
-      Alert.alert('Invalid Phone Number', 'Please enter a valid 10-digit phone number starting with 6-9');
+    if (userPhoneNumber.length<30) {
+      Alert.alert('Invalid UPI/Phone Number', 'Please enter a valid UPI');
       return;
     }
 
@@ -650,17 +650,17 @@ export default function WalletScreen() {
               },
             ]}
           >
-            <Text style={styles.sectionTitle}>Enter Payment Phone Number</Text>
+            <Text style={styles.sectionTitle}>Enter Payment Phone/UPI ID</Text>
             <View style={styles.upiInputContainer}>
-              <MaterialIcons name="phone" size={20} color="#4ECDC4" />
+              <MaterialIcons name="account-balance" size={20} color="#4ECDC4" />
               <TextInput
                 style={[styles.upiInput, userPhoneNumber && styles.upiInputActive]}
-                placeholder="Enter 10-digit phone number"
+                placeholder="Enter phone number/UPI"
                 placeholderTextColor="#888"
                 value={userPhoneNumber}
                 onChangeText={setUserPhoneNumber}
-                keyboardType="phone-pad"
-                maxLength={10}
+                keyboardType="text"
+                maxLength={30}
               />
             </View>
           </Animated.View>
